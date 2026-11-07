@@ -165,11 +165,24 @@ func TestResolvePrefix(t *testing.T) {
 	if p := resolvePrefix(flags{prefix: "/opt/x"}, false); p != "/opt/x" {
 		t.Errorf("flag prefix = %s", p)
 	}
-	// PKGM_PREFIX env wins when no flag
+	// PKGM_PREFIX env wins when no flag — the name released versions use,
+	// which must keep working: a Dockerfile or CI job written against one of
+	// them would otherwise install into ~/.local instead of /usr, silently.
 	t.Setenv("PKGM_PREFIX", "/usr")
 	if p := resolvePrefix(flags{}, false); p != "/usr" {
 		t.Errorf("env prefix = %s", p)
 	}
+	// ZPKGM_PREFIX is the current spelling and wins over it.
+	t.Setenv("ZPKGM_PREFIX", "/opt/new")
+	if p := resolvePrefix(flags{}, false); p != "/opt/new" {
+		t.Errorf("ZPKGM_PREFIX did not win over PKGM_PREFIX: %s", p)
+	}
+	// And on its own.
+	t.Setenv("PKGM_PREFIX", "")
+	if p := resolvePrefix(flags{}, false); p != "/opt/new" {
+		t.Errorf("ZPKGM_PREFIX alone = %s", p)
+	}
+	t.Setenv("ZPKGM_PREFIX", "")
 	// non-root, no env/flag → ~/.local
 	t.Setenv("PKGM_PREFIX", "")
 	if os.Geteuid() != 0 {
