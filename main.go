@@ -82,8 +82,9 @@ env:
                     unsigned upstream pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY       verify bottle signatures, fail-closed (default: on;
                     set 0/false/no/off to disable)
-  PKGM_PREFIX       default install prefix (ideal for FROM scratch: be root,
-                    set PKGM_PREFIX=/usr, no sudo needed)
+  ZPKGM_PREFIX      default install prefix (ideal for FROM scratch: be root,
+                    set ZPKGM_PREFIX=/usr, no sudo needed). PKGM_PREFIX, the
+                    name released versions used, still works
 
   ~/.pkgx/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
   (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-zpkg/packages"). A real
@@ -223,15 +224,34 @@ func dispatch(cmd string, args []string, f flags) error {
 }
 
 // resolvePrefix decides where binaries are installed. Explicit wins:
-// --prefix flag, then $PKGM_PREFIX (both ideal for a `FROM scratch` image
-// where you are root, there is no sudo, and $HOME is unset). Otherwise it
-// mirrors the reference zpkgm: /usr/local as root, else ~/.local. Being root is
-// a fully-supported first-class mode here — zpkgm never nags to use sudo.
+// --prefix flag, then the prefix environment variable (both ideal for a
+// `FROM scratch` image where you are root, there is no sudo, and $HOME is
+// unset). Otherwise /usr/local as root, else ~/.local. Being root is a
+// fully-supported first-class mode here — zpkgm never nags to use sudo.
+// prefixFromEnv reads the install prefix, preferring the current spelling and
+// still honouring the old one.
+//
+// ⛔ THE OLD NAME KEEPS WORKING, AND THAT IS THE POINT OF DOING IT THIS WAY.
+// The command is `zpkgm`, so the variable is ZPKGM_PREFIX; but PKGM_PREFIX is
+// what every Dockerfile, CI job and shell profile written against a released
+// zpkgm says, and silently ignoring it would move an install from /usr to
+// ~/.local with nothing said. A rename of a published interface is a
+// migration, not an edit: read both, prefer the new, document the new.
+//
+// The installer script does the same for its own knobs (ZPKGM_VERSION over
+// PKGM_VERSION), which is where the pattern comes from.
+func prefixFromEnv() string {
+	if p := os.Getenv("ZPKGM_PREFIX"); p != "" {
+		return p
+	}
+	return os.Getenv("PKGM_PREFIX")
+}
+
 func resolvePrefix(f flags, forceLocal bool) string {
 	if f.prefix != "" {
 		return f.prefix
 	}
-	if p := os.Getenv("PKGM_PREFIX"); p != "" {
+	if p := prefixFromEnv(); p != "" {
 		return p
 	}
 	if forceLocal {
