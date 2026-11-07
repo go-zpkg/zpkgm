@@ -10,27 +10,27 @@ import (
 )
 
 // cmdImage writes, to stdout, a `FROM scratch` Containerfile that installs the
-// package's whole runtime closure with pkgm ITSELF, from inside the image, and
+// package's whole runtime closure with zpkgm ITSELF, from inside the image, and
 // runs it shell-free.
 //
 // The output is the vendor-neutral OCI "Containerfile" — identical syntax to a
 // Dockerfile; podman/buildah pick it up by name, and docker builds it with
 // `-f Containerfile`.
 //
-// pkgm is a static CGO_ENABLED=0 binary that already runs on `FROM scratch`, so
+// zpkgm is a static CGO_ENABLED=0 binary that already runs on `FROM scratch`, so
 // it bootstraps the entire userland from within the image: the `RUN` step pulls
-// the closure over HTTPS (pkgm's embedded CA + net/http) straight into the
+// the closure over HTTPS (zpkgm's embedded CA + net/http) straight into the
 // image and wires the pkgx loader (bottle.SetupScratchRootfs). There is no
 // host-side rootfs staging and no manual loader symlink — the `RUN` step IS the
 // from-scratch install (and, in CI, the proof that the published bottles are
 // self-sufficient with no system libc).
 //
-// The subcommand only emits the Containerfile: pkgm is a package manager, not a
-// container-build driver. The build context must contain the target-arch `pkgm`
-// binary as `pkgm`. Build + smoke-test (docker; podman is `podman build .`):
+// The subcommand only emits the Containerfile: zpkgm is a package manager, not a
+// container-build driver. The build context must contain the target-arch `zpkgm`
+// binary as `zpkgm`. Build + smoke-test (docker; podman is `podman build .`):
 //
-//	pkgm image lz4.org > Containerfile
-//	cp "$(command -v pkgm)" pkgm
+//	zpkgm image lz4.org > Containerfile
+//	cp "$(command -v zpkgm)" zpkgm
 //	docker build -f Containerfile -t scratch-lz4 .
 //	docker run --rm scratch-lz4 --version
 func cmdImage(args []string) error {
@@ -61,15 +61,15 @@ func writeImage(w io.Writer, args []string, overlay, glibc string) error {
 	}
 	// A pinned glibc is baked as the environment variable bottle resolves the
 	// implicit C library with, so it holds for BOTH the RUN that installs the
-	// closure and every later `pkgm run` inside the image — one glibc, chosen
+	// closure and every later `zpkgm run` inside the image — one glibc, chosen
 	// once, deterministic for a known cluster kernel. (Passing an extra
 	// gnu.org/glibc@=<ver> install root would only pin the install.)
 	if glibc != "" {
 		fmt.Fprintln(&b, "ENV ZPKG_GLIBC="+strings.TrimPrefix(glibc, "="))
 	}
-	fmt.Fprintln(&b, "COPY pkgm /pkgm")
-	fmt.Fprintln(&b, "RUN "+execForm("/pkgm", "install", "-s", project))
-	fmt.Fprintln(&b, "ENTRYPOINT "+execForm("/pkgm", "run", project, "--"))
+	fmt.Fprintln(&b, "COPY zpkgm /zpkgm")
+	fmt.Fprintln(&b, "RUN "+execForm("/zpkgm", "install", "-s", project))
+	fmt.Fprintln(&b, "ENTRYPOINT "+execForm("/zpkgm", "run", project, "--"))
 	_, err := io.WriteString(w, b.String())
 	return err
 }

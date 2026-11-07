@@ -13,7 +13,7 @@ import (
 
 // ⛔ A SHIM IS A PRIVILEGE BOUNDARY, AND NOTHING HERE TREATED IT AS ONE.
 //
-// Measured on this machine, 2026-10-31 (go-zpkg/pkgm#73). `sudo pkgm install
+// Measured on this machine, 2026-10-31 (go-zpkg/zpkgm#73). `sudo zpkgm install
 // go.dev@1.27.3` wrote /usr/local/bin/go — root-owned, on root's PATH —
 // containing:
 //
@@ -25,10 +25,10 @@ import (
 // root ran through `go` after that executed a user-writable binary and loaded
 // libraries from user-writable directories. /usr/local/pkgs was left empty.
 //
-// The reference pkgm does not have this hole, and not by checking for it: it
+// The reference zpkgm does not have this hole, and not by checking for it: it
 // runs the download as the pre-sudo user (`sudo -u $SUDO_USER pkgx`) and then
 // MIRRORS the result into <prefix>/pkgs, so the shim's target is inside the
-// prefix by construction (pkgm.ts, `mirror_directory(join(dst, "pkgs"), …)`,
+// prefix by construction (zpkgm.ts, `mirror_directory(join(dst, "pkgs"), …)`,
 // read 2026-11-01). We shim straight at the store instead, which is cheaper
 // and is why the store's location had to become the prefix's business.
 //
@@ -50,7 +50,7 @@ import (
 // That last condition, rather than "euid == 0": under `sudo` the dangerous
 // thing is not being root, it is that HOME still belongs to somebody else. A
 // prefix outside HOME means the two can disagree, and ~/.pkgx is then the
-// wrong answer no matter what euid says. A plain `pkgm install` into ~/.local
+// wrong answer no matter what euid says. A plain `zpkgm install` into ~/.local
 // keeps using ~/.pkgx, so nothing changes for the ordinary case.
 func storeFor(prefix string) string {
 	if bottle.Env("ZPKG_DIR") != "" {
@@ -123,7 +123,7 @@ func trustShimTargets(prefix, dir string, closure []bottle.Resolved) error {
 }
 
 // trustStore is trustShimTargets for any writer that records absolute store
-// paths into something privileged. `pkgm service install` is the other one:
+// paths into something privileged. `zpkgm service install` is the other one:
 // it writes `ExecStart=<store>/<project>/v%i/bin/<command>` into
 // /etc/systemd/system, which root runs at every boot — the same hole as the
 // shim, with a worse blast radius, so it gets the same check with the unit

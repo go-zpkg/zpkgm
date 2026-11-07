@@ -103,7 +103,7 @@ func TestParseArgs(t *testing.T) {
 	if !f2.showVersion {
 		t.Error("want showVersion")
 	}
-	// After "--", tool flags must pass through, NOT be parsed as pkgm's own.
+	// After "--", tool flags must pass through, NOT be parsed as zpkgm's own.
 	pos3, f3 := parseArgs([]string{"run", "nodejs.org", "--", "--version", "-h"})
 	if f3.showVersion || f3.help {
 		t.Errorf("flags after -- were stolen: %+v", f3)
@@ -215,7 +215,7 @@ func TestCommandsE2E(t *testing.T) {
 	// Name the prefix rather than inheriting resolvePrefix's default. That
 	// default is euid-dependent — root installs to /usr/local, which is a
 	// first-class mode here — so under a VM or container that runs as root this
-	// test looked for a stub under $HOME that pkgm had correctly put elsewhere.
+	// test looked for a stub under $HOME that zpkgm had correctly put elsewhere.
 	t.Setenv("PKGM_PREFIX", filepath.Join(home, ".local"))
 
 	// install pinned 1.0.0 so outdated has something to report
@@ -383,8 +383,8 @@ func TestParseArgsFileFlag(t *testing.T) {
 
 // ⛔ A LIBRARY HAS NO COMMAND, AND THE KERNEL CANNOT SAY SO. Measured
 // 2026-10-08 against the real registry in a FROM-scratch image:
-// `pkgm run zlib.net -- --version` downloaded the entire closure and then
-// printed "pkgm: no such file or directory". zlib.net declares `provides: []`,
+// `zpkgm run zlib.net -- --version` downloaded the entire closure and then
+// printed "zpkgm: no such file or directory". zlib.net declares `provides: []`,
 // so the binary name was invented from the project's leaf name and exec'd
 // blind. The message names neither the package nor the reason.
 func TestRunRefusesAPackageWithNoCommand(t *testing.T) {
@@ -451,7 +451,7 @@ func TestRunAcceptsABinaryThatIsThere(t *testing.T) {
 
 // ⛔ AN ANSWER IT NEVER OBTAINED MUST NOT READ AS A NEGATIVE. Measured
 // 2026-10-08 in a FROM-scratch container with `--network none`:
-// `pkgm outdated` printed NOTHING and exited 0, with two packages installed
+// `zpkgm outdated` printed NOTHING and exited 0, with two packages installed
 // and not one of them checked — every lookup had failed on DNS. The output
 // was indistinguishable from "you are up to date", which is the one thing it
 // had no evidence for.
@@ -505,7 +505,7 @@ func TestOutdatedOfAnEmptyStoreSaysSo(t *testing.T) {
 
 // stubFor writes the kind of file StubBins writes: a shell stub whose exec
 // line names the binary inside the package's store directory. That exec line
-// is the only durable record of what pkgm linked and for whom.
+// is the only durable record of what zpkgm linked and for whom.
 func stubFor(t *testing.T, binDir, storeDir, project, version, name string, siblings ...string) string {
 	t.Helper()
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -516,7 +516,7 @@ func stubFor(t *testing.T, binDir, storeDir, project, version, name string, sibl
 	// ⛔ LD_LIBRARY_PATH NAMES THE WHOLE CLOSURE, not just this package. The
 	// first version of this helper wrote LD_LIBRARY_PATH="/x" — a stub that
 	// diverged from a real one at precisely the point under test — and the
-	// test passed while `pkgm uninstall jq` removed oniguruma's program in a
+	// test passed while `zpkgm uninstall jq` removed oniguruma's program in a
 	// container. siblings are the other store paths a real stub would carry.
 	libs := []string{filepath.Join(storeDir, project, "v"+version, "lib")}
 	libs = append(libs, siblings...)
@@ -645,7 +645,7 @@ func captureStdout(t *testing.T, fn func()) string {
 // bottle.StubBins, through the fake pantry, rather than by hand.
 //
 // Measured 2026-10-08 in a FROM-scratch container:
-// `pkgm uninstall stedolan.github.io/jq` also removed /opt/bin/onig-config —
+// `zpkgm uninstall stedolan.github.io/jq` also removed /opt/bin/onig-config —
 // oniguruma's program. A stub exports LD_LIBRARY_PATH holding EVERY library
 // directory in the closure, so a substring search over the whole file matches
 // every sibling of the same install. The hand-written fixture wrote

@@ -1,7 +1,7 @@
 # pkgm-service project=github.com/go-authn/authnd store=/opt/pkgx
 #
-# Written by `pkgm service install` from the service block of the
-# github.com/go-authn/authnd recipe. pkgm rewrites this file: put local changes
+# Written by `zpkgm service install` from the service block of the
+# github.com/go-authn/authnd recipe. zpkgm rewrites this file: put local changes
 # in a drop-in instead (systemctl edit authnd@.service).
 #
 # The instance is the VERSION: authnd@<version>.service runs

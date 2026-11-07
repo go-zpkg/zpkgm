@@ -75,7 +75,7 @@ func lockClosure(path, osn, arch string) ([]bottle.Resolved, error) {
 	return out, nil
 }
 
-// cmdInstallLock is `pkgm install --lock <file>`: install exactly the pinned
+// cmdInstallLock is `zpkgm install --lock <file>`: install exactly the pinned
 // set, then link and trust it the same way any other install does.
 func cmdInstallLock(args []string, prefix string, f flags) error {
 	if err := lockConflict(args, f); err != nil {
