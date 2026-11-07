@@ -16,11 +16,11 @@ import (
 	"github.com/go-zpkg/bottle"
 )
 
-// `pkgm service`: run a package's program as a supervised, versioned service.
+// `zpkgm service`: run a package's program as a supervised, versioned service.
 //
 // # ONE TEMPLATE PER SERVICE, THE VERSION IS THE INSTANCE
 //
-// pkgm writes /etc/systemd/system/<svc>@.service once per service, and the
+// zpkgm writes /etc/systemd/system/<svc>@.service once per service, and the
 // instance name is the VERSION:
 //
 //	ExecStart=<store>/<project>/v%i/bin/<command> …
@@ -41,12 +41,20 @@ import (
 //
 //	# pkgm-service project=<project> store=<store> [previous=<version>]
 //
-// `pkgm uninstall` reads ONLY that line. A unit names other paths further
+// ⛔⛔ THE MARKER KEEPS ITS OLD NAME, AND THAT IS DELIBERATE. The command is
+// `zpkgm` now and this file's prose follows, but this line is a RECORD ON
+// DISK that the same constant writes and reads. Renaming it with the command
+// made every unit a released zpkgm had already installed invisible: `service
+// list`, `switch`, `rollback` and `remove` all find a service by this prefix,
+// so they would have reported nothing and left the units running. A record's
+// name is not the command's name, and renaming it buys nothing.
+//
+// `zpkgm uninstall` reads ONLY that line. A unit names other paths further
 // down (and may one day carry an Environment= naming other packages), and a
 // search of the whole file is exactly how `uninstall jq` once removed
 // oniguruma's program: the stub's LD_LIBRARY_PATH named it.
 
-// The places and programs `pkgm service` touches. Variables so a test can
+// The places and programs `zpkgm service` touches. Variables so a test can
 // point them at a temporary directory and a fake systemd.
 var (
 	unitDir       = "/etc/systemd/system"
@@ -73,9 +81,11 @@ var (
 	reachable = checkReachable
 )
 
+// markerPrefix is an ON-DISK FORMAT, not the command name — see the note
+// above. It must stay as released zpkgm wrote it.
 const markerPrefix = "# pkgm-service "
 
-// unitMarker is the parsed first line of a file pkgm wrote.
+// unitMarker is the parsed first line of a file zpkgm wrote.
 type unitMarker struct {
 	project, store, previous string
 }
@@ -121,7 +131,7 @@ func readMarker(path string) (unitMarker, bool) {
 	return parseMarker(line)
 }
 
-// template is one pkgm-written template unit found on disk.
+// template is one zpkgm-written template unit found on disk.
 type template struct {
 	svc    string // authn-bridge
 	path   string // /etc/systemd/system/authn-bridge@.service
@@ -130,7 +140,7 @@ type template struct {
 
 func templatePath(svc string) string { return filepath.Join(unitDir, svc+"@.service") }
 
-// pkgmTemplates lists the template units pkgm wrote, by their marker.
+// pkgmTemplates lists the template units zpkgm wrote, by their marker.
 func pkgmTemplates() ([]template, error) {
 	ents, err := os.ReadDir(unitDir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -153,16 +163,16 @@ func pkgmTemplates() ([]template, error) {
 	return out, nil
 }
 
-// findTemplate returns the pkgm template for svc, refusing a unit somebody
+// findTemplate returns the zpkgm template for svc, refusing a unit somebody
 // else wrote.
 func findTemplate(svc string) (template, error) {
 	p := templatePath(svc)
 	if _, err := os.Stat(p); err != nil {
-		return template{}, fmt.Errorf("%s is not a pkgm service: there is no %s", svc, p)
+		return template{}, fmt.Errorf("%s is not a zpkgm service: there is no %s", svc, p)
 	}
 	m, ok := readMarker(p)
 	if !ok {
-		return template{}, fmt.Errorf("%s was not written by pkgm (its first line is not %q…): it is left alone", p, strings.TrimSpace(markerPrefix))
+		return template{}, fmt.Errorf("%s was not written by zpkgm (its first line is not %q…): it is left alone", p, strings.TrimSpace(markerPrefix))
 	}
 	return template{svc: svc, path: p, marker: m}, nil
 }
@@ -221,7 +231,7 @@ func activeVersions(systemctl, svc string) ([]string, error) {
 // enabled or running service instance executes. It reads the disk and, if it
 // exists, asks systemctl; it never asks the network.
 //
-// ⛔ ONLY `pkgm uninstall` DELETES A VERSION DIRECTORY. `update` and `pin`
+// ⛔ ONLY `zpkgm uninstall` DELETES A VERSION DIRECTORY. `update` and `pin`
 // install beside what is there and remove nothing, which is why this guard
 // sits in cmdUninstall alone. TestOnlyUninstallRemovesFromTheStore pins that
 // fact, because it can stop being true quietly.
@@ -264,7 +274,7 @@ func refuseUninstallInUse(projects []string, store string) error {
 				lines = append(lines, fmt.Sprintf("  %s@%s.service (%s) runs %s",
 					t.svc, v, strings.Join(states[v], ", "), filepath.Join(store, project, "v"+v)))
 			}
-			ways = append(ways, fmt.Sprintf("run \"pkgm service remove %s\" first", t.svc))
+			ways = append(ways, fmt.Sprintf("run \"zpkgm service remove %s\" first", t.svc))
 		}
 	}
 	if len(lines) == 0 {
@@ -298,8 +308,8 @@ func renderUnit(s *bottle.Service, m unitMarker) string {
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
 	w("%s", m)
 	w("#")
-	w("# Written by `pkgm service install` from the service block of the")
-	w("# %s recipe. pkgm rewrites this file: put local changes", m.project)
+	w("# Written by `zpkgm service install` from the service block of the")
+	w("# %s recipe. zpkgm rewrites this file: put local changes", m.project)
 	w("# in a drop-in instead (systemctl edit %s@.service).", s.Name)
 	w("#")
 	w("# The instance is the VERSION: %s@<version>.service runs", s.Name)
@@ -394,7 +404,7 @@ func renderSysusers(s *bottle.Service, m unitMarker) string {
 	if s.StateDirectory != nil {
 		home = "/var/lib/" + s.Name
 	}
-	return fmt.Sprintf("%s\n#\n# The account %s@.service runs as, written by `pkgm service install`.\n"+
+	return fmt.Sprintf("%s\n#\n# The account %s@.service runs as, written by `zpkgm service install`.\n"+
 		"# A static account, not DynamicUser=: its files must keep one owner across\n"+
 		"# versions, reinstalls and restores.\n#\n"+
 		"#Type Name ID GECOS Home Shell\nu %s - \"%s\" %s -\n",
@@ -404,20 +414,20 @@ func renderSysusers(s *bottle.Service, m unitMarker) string {
 // --- preconditions --------------------------------------------------------------
 
 // needSystemd refuses, in one sentence, on a machine with no running systemd.
-// A FROM-scratch image is pkgm's core use case and has no service manager; the
+// A FROM-scratch image is zpkgm's core use case and has no service manager; the
 // alternative was "exec: systemctl: executable file not found", which names
 // a symptom and not the reason.
 func needSystemd(cmd string) (string, error) {
 	if st, err := os.Stat(systemdRunDir); err != nil || !st.IsDir() {
-		return "", fmt.Errorf("pkgm service %s needs systemd, and this system is not running it (%s does not exist): "+
-			"a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `pkgm run`", cmd, systemdRunDir)
+		return "", fmt.Errorf("zpkgm service %s needs systemd, and this system is not running it (%s does not exist): "+
+			"a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkgm run`", cmd, systemdRunDir)
 	}
 	systemctl, err := lookPath("systemctl")
 	if err != nil {
-		return "", fmt.Errorf("pkgm service %s needs systemctl, and systemd is running but systemctl is not on PATH", cmd)
+		return "", fmt.Errorf("zpkgm service %s needs systemctl, and systemd is running but systemctl is not on PATH", cmd)
 	}
 	if geteuid() != 0 {
-		return "", fmt.Errorf("pkgm service %s writes %s and runs systemctl, so it must run as root", cmd, unitDir)
+		return "", fmt.Errorf("zpkgm service %s writes %s and runs systemctl, so it must run as root", cmd, unitDir)
 	}
 	return systemctl, nil
 }
@@ -480,10 +490,10 @@ func checkProgram(project string, s *bottle.Service, provides []string, bin stri
 	}
 	interp, err := bottle.ELFInterp(bin)
 	if err != nil {
-		return fmt.Errorf("%s: %s is not an ELF program (%v); pkgm service runs statically linked programs only", project, bin, err)
+		return fmt.Errorf("%s: %s is not an ELF program (%v); zpkgm service runs statically linked programs only", project, bin, err)
 	}
 	if interp != "" {
-		return fmt.Errorf("%s: %s is dynamically linked (interpreter %s); pkgm service runs statically linked programs only, "+
+		return fmt.Errorf("%s: %s is dynamically linked (interpreter %s); zpkgm service runs statically linked programs only, "+
 			"because one unit serves every version and cannot carry one version's library path", project, bin, interp)
 	}
 	return nil
@@ -507,7 +517,7 @@ func serviceConstraint(arg string) (project, constraint string) {
 
 // ensureInstalled resolves and installs the closure, returning the version and
 // the closure itself — the caller needs it to judge who owns the paths the
-// unit is about to record (see trustStore, and go-zpkg/pkgm#73).
+// unit is about to record (see trustStore, and go-zpkg/zpkgm#73).
 func ensureInstalled(project, constraint, store string) (string, []bottle.Resolved, error) {
 	closure, err := bottle.ResolveClosure(map[string]string{project: constraint})
 	if err != nil {
@@ -529,7 +539,7 @@ func ensureInstalled(project, constraint, store string) (string, []bottle.Resolv
 }
 
 // prepare fetches the service block, installs the version and checks that the
-// unit pkgm would write can run it. It returns the service, the version and
+// unit zpkgm would write can run it. It returns the service, the version and
 // the template that would be written.
 func prepare(project, constraint, store string) (*bottle.Service, string, error) {
 	if err := checkStore(store); err != nil {
@@ -548,7 +558,7 @@ func prepare(project, constraint, store string) (*bottle.Service, string, error)
 	}
 	// ⛔ BEFORE A ROOT UNIT RECORDS THESE PATHS. The unit's ExecStart is
 	// <store>/<project>/v%i/bin/<command>, run by root at every boot, so a
-	// store anyone else can write is go-zpkg/pkgm#73 with a worse blast
+	// store anyone else can write is go-zpkg/zpkgm#73 with a worse blast
 	// radius than the shim it was reported against. checkStore above refuses
 	// a store under /home, /root, /run/user or /tmp because the sandbox hides
 	// those — a different question from who OWNS it, and /opt/pkgx owned by
@@ -573,14 +583,14 @@ func prepare(project, constraint, store string) (*bottle.Service, string, error)
 	return s, v, nil
 }
 
-// writeOwned writes a file pkgm owns, refusing to replace one it does not.
+// writeOwned writes a file zpkgm owns, refusing to replace one it does not.
 func writeOwned(path, content string) (changed bool, err error) {
 	old, err := os.ReadFile(path)
 	switch {
 	case err == nil:
 		line, _, _ := strings.Cut(string(old), "\n")
 		if _, ok := parseMarker(line); !ok {
-			return false, fmt.Errorf("%s exists and was not written by pkgm: it is left alone", path)
+			return false, fmt.Errorf("%s exists and was not written by zpkgm: it is left alone", path)
 		}
 		if string(old) == content {
 			return false, nil
@@ -591,7 +601,7 @@ func writeOwned(path, content string) (changed bool, err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return false, err
 	}
-	tmp := path + ".pkgm-tmp"
+	tmp := path + ".zpkgm-tmp"
 	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
 		return false, err
 	}
@@ -607,7 +617,7 @@ func cmdService(args []string, stdout io.Writer) error {
 	sub, rest := args[0], args[1:]
 	one := func() (string, error) {
 		if len(rest) != 1 {
-			return "", fmt.Errorf("pkgm service %s takes exactly one argument", sub)
+			return "", fmt.Errorf("zpkgm service %s takes exactly one argument", sub)
 		}
 		return rest[0], nil
 	}
@@ -681,7 +691,7 @@ func serviceInstall(arg string, w io.Writer) error {
 		return err
 	}
 	if other := otherVersions(enabledVersions(s.Name), v); len(other) > 0 {
-		return fmt.Errorf("%s already runs %s: use `pkgm service switch %s@%s` to change the version",
+		return fmt.Errorf("%s already runs %s: use `zpkgm service switch %s@%s` to change the version",
 			s.Name, strings.Join(other, ", "), project, v)
 	}
 	m := unitMarker{project: project, store: store}
@@ -693,14 +703,14 @@ func serviceInstall(arg string, w io.Writer) error {
 	} else if _, statErr := os.Stat(templatePath(s.Name)); statErr == nil {
 		return err
 	}
-	if _, err := writeOwned(filepath.Join(sysusersDir, "pkgm-"+s.Name+".conf"), renderSysusers(s, m)); err != nil {
+	if _, err := writeOwned(filepath.Join(sysusersDir, "zpkgm-"+s.Name+".conf"), renderSysusers(s, m)); err != nil {
 		return err
 	}
 	sysusers, err := lookPath("systemd-sysusers")
 	if err != nil {
-		return fmt.Errorf("pkgm service install needs systemd-sysusers to create the account %s, and it is not on PATH", s.User)
+		return fmt.Errorf("zpkgm service install needs systemd-sysusers to create the account %s, and it is not on PATH", s.User)
 	}
-	if err := systemctlDo(sysusers, filepath.Join(sysusersDir, "pkgm-"+s.Name+".conf")); err != nil {
+	if err := systemctlDo(sysusers, filepath.Join(sysusersDir, "zpkgm-"+s.Name+".conf")); err != nil {
 		return err
 	}
 	changed, err := writeOwned(templatePath(s.Name), renderUnit(s, m))
@@ -740,7 +750,7 @@ func currentVersion(svc string) (string, error) {
 	vs := enabledVersions(svc)
 	switch len(vs) {
 	case 0:
-		return "", fmt.Errorf("%s has no enabled version: use `pkgm service install`", svc)
+		return "", fmt.Errorf("%s has no enabled version: use `zpkgm service install`", svc)
 	case 1:
 		return vs[0], nil
 	default:
@@ -802,7 +812,7 @@ func serviceSwitch(arg string, w io.Writer) error {
 	}
 	project, constraint := serviceConstraint(arg)
 	if constraint == "*" {
-		return fmt.Errorf("pkgm service switch needs a version: %s@<version>", project)
+		return fmt.Errorf("zpkgm service switch needs a version: %s@<version>", project)
 	}
 	store := bottle.Dir()
 	s, v, err := prepare(project, constraint, store)
@@ -834,7 +844,7 @@ func serviceSwitch(arg string, w io.Writer) error {
 	if err := setPrevious(t, from); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s: %s → %s; %s@%s.service is active (`pkgm service rollback %s` returns to %s)\n",
+	fmt.Fprintf(w, "%s: %s → %s; %s@%s.service is active (`zpkgm service rollback %s` returns to %s)\n",
 		s.Name, from, v, s.Name, v, s.Name, from)
 	return systemctlDo(systemctl, "daemon-reload")
 }
@@ -859,7 +869,7 @@ func serviceRollback(svc string, w io.Writer) error {
 		return fmt.Errorf("%s: previous version %q in %s is not a version", svc, to, t.path)
 	}
 	if st, err := os.Stat(filepath.Join(t.marker.store, t.marker.project, "v"+to)); err != nil || !st.IsDir() {
-		return fmt.Errorf("%s: %s is no longer in the store (%s): `pkgm service switch %s@%s` installs it again",
+		return fmt.Errorf("%s: %s is no longer in the store (%s): `zpkgm service switch %s@%s` installs it again",
 			svc, to, filepath.Join(t.marker.store, t.marker.project), t.marker.project, to)
 	}
 	from, err := currentVersion(svc)
@@ -884,7 +894,7 @@ func serviceList(w io.Writer) error {
 		return err
 	}
 	if len(tpls) == 0 {
-		fmt.Fprintf(w, "no pkgm services in %s\n", unitDir)
+		fmt.Fprintf(w, "no zpkgm services in %s\n", unitDir)
 		return nil
 	}
 	systemctl := ""
@@ -948,7 +958,7 @@ func contains(vs []string, v string) bool {
 }
 
 // serviceRemove stops and disables every instance of a service and deletes its
-// template. The package stays installed (that is `pkgm uninstall`), and so do
+// template. The package stays installed (that is `zpkgm uninstall`), and so do
 // the account and the state, configuration and runtime directories, which
 // belong to the site, not to a version.
 func serviceRemove(svc string, w io.Writer) error {
@@ -986,7 +996,7 @@ func serviceRemove(svc string, w io.Writer) error {
 	if err := systemctlDo(systemctl, "daemon-reload"); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s: removed %s; kept the account and its directories (/etc/sysusers.d/pkgm-%s.conf, /var/lib/%s, /etc/%s); "+
-		"`pkgm uninstall %s` may now remove the package\n", svc, t.path, svc, svc, svc, t.marker.project)
+	fmt.Fprintf(w, "%s: removed %s; kept the account and its directories (/etc/sysusers.d/zpkgm-%s.conf, /var/lib/%s, /etc/%s); "+
+		"`zpkgm uninstall %s` may now remove the package\n", svc, t.path, svc, svc, svc, t.marker.project)
 	return nil
 }

@@ -1,4 +1,4 @@
-# pkgm
+# zpkgm
 
 [![CI](https://github.com/go-zpkg/zpkgm/actions/workflows/ci.yml/badge.svg)](https://github.com/go-zpkg/zpkgm/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-zpkg/zpkgm.svg)](https://pkg.go.dev/github.com/go-zpkg/zpkgm)
@@ -6,42 +6,34 @@
 
 [Home](https://go-zpkg.github.io/) · [Docs](https://go-zpkg.github.io/docs/)
 
-A **dependency-free, pure-Go** package manager for [pkgx](https://pkgx.sh)
-bottles — a single `CGO_ENABLED=0` binary that runs on a `FROM scratch` image
-with **zero** runtime dependencies.
+A **dependency-free, pure-Go** package installer — a single `CGO_ENABLED=0`
+binary that runs on a `FROM scratch` image with **zero** runtime dependencies,
+about 9 MB.
 
-The reference `pkgm` is a Deno/TypeScript script that shells out to
-`pkgx`, `deno`, `curl`, `openssl`, `zlib` and `xz` — roughly **515 MB** of
-runtime closure just to install a package. `pkgm` replaces all of it with one
-static ~9 MB binary:
-
-| | reference pkgm | go-zpkg/pkgm |
-| --- | --- | --- |
-| downloader | curl + openssl + nghttp2 | Go `net/http` (TLS built in, CA bundle embedded) |
-| extractor | info-zip + xz | Go `compress/gzip` + `ulikunitz/xz` |
-| script runtime | deno (~130 MB) | — none — |
-| runtime deps | glibc + libgcc_s + … | **none** (static) |
-| `FROM scratch` | ✗ | ✓ |
+What it needs none of, which is the point: no libc, no interpreter, no
+`curl`/`openssl` for the download (Go's `net/http` with an embedded CA
+bundle), no `info-zip`/`xz` for the extraction (`compress/gzip` and a pure-Go
+xz decoder).
 
 ## Install
 
 **Linux / macOS** — one line, naming the release you want:
 
 ```sh
-curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- pkgm v0.1.4
+curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- zpkgm v0.10.0
 ```
 
 **Windows** (PowerShell) — `irm | iex` passes no arguments, so the version goes
 in the environment:
 
 ```powershell
-$env:PKGM_VERSION='v0.1.4'; irm https://go-zpkg.github.io/install.ps1 | iex
+$env:ZPKGM_VERSION='v0.10.0'; irm https://go-zpkg.github.io/install.ps1 | iex
 ```
 
 The installer downloads the static binary for your os/arch from that
 [release](https://github.com/go-zpkg/zpkgm/releases), verifies it against the
-release `SHA256SUMS`, and drops `pkgm` on your `PATH` (`$HOME/.local/bin`, or
-`%LOCALAPPDATA%\Programs\go-zpkg` on Windows). Set `PKGM_INSTALL` to override
+release `SHA256SUMS`, and drops `zpkgm` on your `PATH` (`$HOME/.local/bin`, or
+`%LOCALAPPDATA%\Programs\go-zpkg` on Windows). Set `ZPKGM_INSTALL` to override
 the directory on Unix.
 
 ⛔ **`SHA256SUMS` is a checksum of itself.** It says the binaries match a
@@ -51,7 +43,7 @@ GitHub's **provenance attestation** — signed through Sigstore, saying that
 this repository's release workflow built that file from that commit:
 
 ```sh
-gh attestation verify -R go-zpkg/pkgm pkgm-linux-amd64
+gh attestation verify -R go-zpkg/zpkgm zpkgm-linux-amd64
 ```
 
 Every file of a release published after 2026-10-20 carries one; earlier ones
@@ -62,9 +54,9 @@ than failing closed, so a 404 on an older binary means *unattested*, not
 The version is named on purpose: this line copied today and the same line
 copied in six months install the same bytes, and a bad release does not reach
 everyone who happens to install that hour. To track releases instead, say so —
-`sh -s -- pkgm latest`, or `PKGM_VERSION=latest`, which is also what a bare
+`sh -s -- zpkgm latest`, or `ZPKGM_VERSION=latest`, which is also what a bare
 `| sh` has always done. Re-running is the updater; it skips the download when
-the target version is already installed, and `PKGM_FORCE=1` reinstalls anyway.
+the target version is already installed, and `ZPKGM_FORCE=1` reinstalls anyway.
 
 **Go users**:
 
@@ -72,21 +64,21 @@ the target version is already installed, and `PKGM_FORCE=1` reinstalls anyway.
 go install github.com/go-zpkg/zpkgm@latest
 ```
 
-Once installed, `pkgm install lz4.org` verifies each bottle against the signed
+Once installed, `zpkgm install lz4.org` verifies each bottle against the signed
 registry by default.
 
 ## Usage
 
 ```
-pkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
-pkgm uninstall|rm <pkg> ...             remove an installation (works offline)
-pkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
-pkgm list|ls                            list what's installed
-pkgm outdated                           what has a newer version (exit 1 if any could not be checked)
-pkgm update|up|upgrade                  update installations to latest
-pkgm pin          <pkg>@version ...     install pinned to an exact version
-pkgm run|x        <pkg> [-- args...]    run a pkg (works FROM scratch)
-pkgm service      install|switch|rollback|list|remove   run a daemon under systemd, by version
+zpkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
+zpkgm uninstall|rm <pkg> ...             remove an installation (works offline)
+zpkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
+zpkgm list|ls                            list what's installed
+zpkgm outdated                           what has a newer version (exit 1 if any could not be checked)
+zpkgm update|up|upgrade                  update installations to latest
+zpkgm pin          <pkg>@version ...     install pinned to an exact version
+zpkgm run|x        <pkg> [-- args...]    run a pkg (works FROM scratch)
+zpkgm service      install|switch|rollback|list|remove   run a daemon under systemd, by version
 
 flags: -h/--help  -v/--version  -p/--pin  -P/--prefix DIR  -s/--from-scratch
        -f/--file FILE   read packages from a file, one <pkg>[@version] per line
@@ -99,19 +91,20 @@ env:   ZPKG_DIR     bottle store (default: ~/.pkgx, or <prefix>/pkgs when the
        PKGM_PREFIX  default install prefix (ideal for FROM scratch)
 ```
 
-By default `pkgm install lz4.org` pulls from the signed OCI registry
-`oci://ghcr.io/go-zpkg/packages` and verifies each bottle's signature before
-installing — no env needed. To use the full unsigned upstream pantry instead,
-set `ZPKG_DIST=https://dist.pkgx.dev` together with `ZPKG_VERIFY=0`.
+By default `zpkgm install lz4.org` pulls from our signed OCI registry and
+verifies each bottle's signature before installing — no env needed. The
+registry is `bottle.DistBase`, and `zpkgm --help` prints the one this binary is
+built against; it is named in one place so it moves in one edit. Point
+`ZPKG_DIST` elsewhere if you have a mirror of your own.
 
-The `install`/`uninstall`/`shim`/`list`/`outdated`/`update`/`pin` command
-surface and the `~/.local` vs `/usr/local` prefix logic mirror the reference
-`pkgm`, so it is a drop-in replacement.
+The command surface is `install`/`uninstall`/`shim`/`list`/`outdated`/
+`update`/`pin`, with `~/.local` for an unprivileged install and `/usr/local`
+otherwise.
 
 ### `install --lock`: the same install later, not a similar one
 
 ```console
-$ pkgm install --lock seed.lock.hcl
+$ zpkgm install --lock seed.lock.hcl
   installed acme.org/tool v1.0.0
   installed zlib.net v1.3.2
 linked 2 binaries → /usr/local/bin
@@ -154,8 +147,8 @@ It now prints its totals every time, including the zeros, names what it could
 not reach, and exits **1** if anything went unchecked:
 
 ```sh
-$ docker run --rm --network none -v store:/pkgx pkgm-scratch outdated
-pkgm: 1 of 1 installed packages could not be checked
+$ docker run --rm --network none -v store:/pkgx zpkgm-scratch outdated
+zpkgm: 1 of 1 installed packages could not be checked
 
 could NOT be asked about — these are not an all-clear:
   github.com/kkos/oniguruma: Get "https://ghcr.io/v2/…/tags/list": dial tcp:
@@ -172,13 +165,13 @@ printing a silence that reads as a clean bill of health.
 ### `uninstall` asks the machine, not the pantry
 
 It used to fetch the recipe to learn which binaries to unlink. That needs the
-**network** — measured, `pkgm uninstall` failed on a DNS lookup inside a
+**network** — measured, `zpkgm uninstall` failed on a DNS lookup inside a
 `--network none` container — and it is the wrong oracle besides: the recipe
 answers for what the package provides *today*, not for what we actually
 linked, so a `provides:` that changed since the install left stale stubs
 behind.
 
-What pkgm linked is written down on the machine. Every stub ends in
+What zpkgm linked is written down on the machine. Every stub ends in
 
 ```sh
 exec "<store>/<project>/v<version>/bin/<name>" "$@"
@@ -201,23 +194,23 @@ reading it:
   stubs with the real `StubBins`, and checks the fixture reproduces the hazard
   before concluding anything from its own success.
 
-### `pkgm service`: a package's daemon, supervised and versioned
+### `zpkgm service`: a package's daemon, supervised and versioned
 
 ```
-pkgm service install  <pkg>[@version]   install it, write its unit and account, enable and start it
-pkgm service switch   <pkg>@version     move the service to another version
-pkgm service rollback <svc>             back to the version before the last switch (offline)
-pkgm service list                       which version each service runs
-pkgm service remove   <svc>             stop and disable every instance, delete the unit
+zpkgm service install  <pkg>[@version]   install it, write its unit and account, enable and start it
+zpkgm service switch   <pkg>@version     move the service to another version
+zpkgm service rollback <svc>             back to the version before the last switch (offline)
+zpkgm service list                       which version each service runs
+zpkgm service remove   <svc>             stop and disable every instance, delete the unit
 ```
 
 A recipe that ships a daemon says how to run it in a `service "<name>" { … }`
 block (see [bottle](https://github.com/go-zpkg/bottle#a-recipe-can-declare-a-service)).
-pkgm **renders** the systemd unit from that data. No unit file comes in the
+zpkgm **renders** the systemd unit from that data. No unit file comes in the
 bottle. The hardening every service shares is written once, here, and the
 recipe states only what differs between daemons.
 
-**One template per service, and the instance is the version.** pkgm writes
+**One template per service, and the instance is the version.** zpkgm writes
 `/etc/systemd/system/<svc>@.service` with
 
 ```ini
@@ -230,7 +223,7 @@ about it: there is no `current` symlink, and no version is typed into a unit.
 State lives in versionless directories that systemd creates
 (`StateDirectory=`, `RuntimeDirectory=`, `ConfigurationDirectory=`).
 Nothing is written under the store, which stays immutable. The account is a
-static one, from `/etc/sysusers.d/pkgm-<svc>.conf` applied with
+static one, from `/etc/sysusers.d/zpkgm-<svc>.conf` applied with
 `systemd-sysusers`.
 
 The rendered units were checked against the hand-written reference units of
@@ -262,8 +255,8 @@ one version's library path the way a stub does.
 ## A shim is a privilege boundary
 
 ```console
-$ sudo pkgm install go.dev@1.27.3
-pkgm: refusing to record store paths under /usr/local/bin:
+$ sudo zpkgm install go.dev@1.27.3
+zpkgm: refusing to record store paths under /usr/local/bin:
   /Users/you/.pkgx is owned by uid 501, and /usr/local/bin belongs to uid 0 —
   uid 501 could replace what gets run with root's privileges.
   Use a store that uid 0 controls: ZPKG_DIR=/usr/local/pkgs
@@ -275,7 +268,7 @@ of whoever invokes it, so anyone who can write one of those paths can run
 code as that person.
 
 `ZPKG_DIR` defaults to `~/.pkgx`, and **macOS `sudo` keeps the caller's
-`HOME`** — so `sudo pkgm install go.dev` used to write a root-owned
+`HOME`** — so `sudo zpkgm install go.dev` used to write a root-owned
 `/usr/local/bin/go` pointing into an unprivileged user's home directory, and
 anything root ran through `go` after that executed a user-writable binary.
 That was [#73](https://github.com/go-zpkg/zpkgm/issues/73).
@@ -284,7 +277,7 @@ Two things changed, because either alone leaves a hole:
 
 - **The default follows the prefix.** With `ZPKG_DIR` unset, the store is
   `<prefix>/pkgs` whenever the prefix is not inside the home directory of the
-  user pkgm is running as. A plain `pkgm install` into `~/.local` goes on
+  user zpkgm is running as. A plain `zpkgm install` into `~/.local` goes on
   using `~/.pkgx`, so nothing moves for the ordinary case, and `ZPKG_DIR`
   still wins when you set it.
 - **The invariant is checked anyway.** `install`, `shim`, `update` and
@@ -299,28 +292,28 @@ prefix's own owner is allowed too, because on a stock macOS with Homebrew
 `/usr/local/bin` belongs to the admin user rather than to root, and refusing
 there would be a false positive on the commonest system prefix there is.
 
-The reference pkgm does not have this hole, and not by checking for it: it
-runs the download as the pre-sudo user and then *mirrors* the result into
-`<prefix>/pkgs`, so the shim's target is inside the prefix by construction.
-pkgm shims straight at the store instead, which is why the store's location
-had to become the prefix's business.
+The design this descends from does not have this hole, and not by checking for
+it: it runs the download as the pre-sudo user and then *mirrors* the result
+into `<prefix>/pkgs`, so the shim's target is inside the prefix by
+construction. zpkgm shims straight at the store instead, which is why the
+store's location had to become the prefix's business.
 
 **Without systemd** (a container, a `FROM scratch` image), every command that
 changes something refuses in one sentence that names the reason:
 
 ```
-pkgm: pkgm service install needs systemd, and this system is not running it (/run/systemd/system does not exist): a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `pkgm run`
+zpkgm: zpkgm service install needs systemd, and this system is not running it (/run/systemd/system does not exist): a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkgm run`
 ```
 
-`pkgm service list` still answers from the disk.
+`zpkgm service list` still answers from the disk.
 
 ### `uninstall` will not remove what a service runs
 
 ```
-$ pkgm uninstall github.com/go-authn/bridge
-pkgm: refusing to uninstall: a service runs it, and nothing was removed:
+$ zpkgm uninstall github.com/go-authn/bridge
+zpkgm: refusing to uninstall: a service runs it, and nothing was removed:
   authn-bridge@0.20.0.service (enabled, active) runs /opt/pkgx/github.com/go-authn/bridge/v0.20.0
-run "pkgm service remove authn-bridge" first
+run "zpkgm service remove authn-bridge" first
 ```
 
 A refused uninstall changes nothing, stubs included, and it checks every
@@ -373,25 +366,25 @@ on an image with no system libc. Packages that ship a `#!/bin/sh` wrapper
 
 ```dockerfile
 FROM scratch
-COPY pkgm /pkgm
+COPY zpkgm /zpkgm
 ENV ZPKG_DIR=/pkgx
-ENTRYPOINT ["/pkgm"]
+ENTRYPOINT ["/zpkgm"]
 ```
 
 ```sh
-$ docker run --rm pkgm-scratch run gnu.org/bash -- --version
+$ docker run --rm zpkgm-scratch run gnu.org/bash -- --version
 GNU bash, version 5.3.0(1)-release (aarch64-unknown-linux-gnu)
 ```
 
-A `FROM scratch` image whose only file is the `pkgm` binary can install **and
+A `FROM scratch` image whose only file is the `zpkgm` binary can install **and
 run** real packages, with no system libc.
 
 ### automatic closure completion
 
-pkgx bottles link the "implicit system" libraries — `libc`/`libm`/`libpthread`
+Bottles link the "implicit system" libraries — `libc`/`libm`/`libpthread`
 (glibc) and, for C++ packages, `libgcc_s`/`libstdc++`/`libatomic` (gcc) —
-without declaring them, because pkgx assumes a host toolchain. On `FROM
-scratch` there is no host. `run`, and `install --from-scratch`/`-s`, read each
+without declaring them, because the recipes they came from assume a host
+toolchain. On `FROM scratch` there is no host. `run`, and `install --from-scratch`/`-s`, read each
 bottle's ELF `DT_NEEDED` (via Go's `debug/elf`) and pull the bottles that fill
 the gap automatically:
 
@@ -402,28 +395,28 @@ the gap automatically:
 So a C++ package works with no per-recipe changes:
 
 ```sh
-$ docker run --rm pkgm-scratch run nodejs.org -- --version   # pulls glibc + libstdcxx
+$ docker run --rm zpkgm-scratch run nodejs.org -- --version   # pulls glibc + libstdcxx
 v22.x.x
 ```
 
 ### root without sudo
 
 A scratch container runs as **root**, has **no `sudo`**, and often no `$HOME`.
-The reference pkgm's `root → /usr/local`, `user → ~/.local`, "elevate with
-sudo" model does not fit. pkgm treats root as a first-class install mode (no
+The reference zpkgm's `root → /usr/local`, `user → ~/.local`, "elevate with
+sudo" model does not fit. zpkgm treats root as a first-class install mode (no
 "use sudo" nagging) and lets you pin the prefix explicitly — ideal in a
 Dockerfile:
 
 ```dockerfile
 FROM scratch
-COPY pkgm /pkgm
+COPY zpkgm /zpkgm
 ENV ZPKG_DIR=/pkgx
 ENV PKGM_PREFIX=/usr     # bins land in /usr/bin; no sudo, no HOME needed
-ENTRYPOINT ["/pkgm"]
+ENTRYPOINT ["/zpkgm"]
 ```
 
 ```sh
-$ docker run --rm -e PKGM_PREFIX=/usr pkgm-scratch install gnu.org/bash
+$ docker run --rm -e PKGM_PREFIX=/usr zpkgm-scratch install gnu.org/bash
   installed gnu.org/bash v5.3.0
 linked 2 binaries → /usr/bin
 ```
@@ -435,7 +428,7 @@ Prefix precedence: `--prefix`/`-P` flag → `PKGM_PREFIX` → root ? `/usr/local
 
 Some pkgx tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
 that set up env and exec the real ELF. On `FROM scratch` there is no shell — so
-pkgm, being a package manager, **installs the pkgx `gnu.org/bash` +
+zpkgm, being a package manager, **installs the pkgx `gnu.org/bash` +
 `gnu.org/coreutils`** and points `/bin/sh` at that real bash (and puts coreutils
 like `dirname` on `PATH`). It also symlinks the pkgx loader to `/lib/ld-linux`
 (best-effort; a no-op on a normal system) so every bottle ELF — the wrapper's
@@ -446,7 +439,7 @@ the `set -e` semantics they rely on. That is how `git` runs on scratch.
 ### a package with no command
 
 Not every package is a program. A recipe with an empty `provides:` ships
-headers and a `.so`, and the binary name pkgm would run is a **guess** — the
+headers and a `.so`, and the binary name zpkgm would run is a **guess** — the
 project's leaf name, which is the right answer often enough to keep, and no
 answer at all for a library.
 
@@ -454,8 +447,8 @@ answer at all for a library.
 you never asked about:
 
 ```sh
-$ pkgm run zlib.net -- --version
-pkgm: zlib.net provides no command: it is a library, not a program — `pkgm install zlib.net` installs its files, but there is nothing to run
+$ zpkgm run zlib.net -- --version
+zpkgm: zlib.net provides no command: it is a library, not a program — `zpkgm install zlib.net` installs its files, but there is nothing to run
 ```
 
 A **declared** command that is missing is a different fault — the package, or
@@ -466,13 +459,12 @@ need in order to go and look.
 
 ## How it works
 
-1. **resolve** — read `<project>/package.yml` from the pkgx pantry and walk the
+1. **resolve** — read the project's recipe from the pantry and walk the
    runtime `dependencies:` graph breadth-first; pick the highest
    `versions.txt` entry satisfying each constraint (`*`, `^`, `~`, `>=`, `=`).
-2. **download** — fetch `<project>/<os>/<arch>/v<ver>.tar.{gz,xz}` from the bottle
-   source (default: the signed OCI registry `oci://ghcr.io/go-zpkg/packages`,
-   verifying each bottle's signature; `ZPKG_DIST=https://dist.pkgx.dev` +
-   `ZPKG_VERIFY=0` for the unsigned upstream).
+2. **download** — fetch `<project>/<os>/<arch>/v<ver>.tar.{gz,xz}` from the
+   bottle source (default: our signed OCI registry, verifying each bottle's
+   signature — `zpkgm --help` prints which one, and `ZPKG_DIST` overrides it).
 3. **extract** — stream straight through gzip/xz + tar into `ZPKG_DIR`.
 4. **link** — write env-setting stubs (or run through the loader) so the tools
    find their sibling bottles' libraries.
@@ -505,4 +497,4 @@ maintainers to publish complete runtime closures.
 
 ## License
 
-BSD-3-Clause © the go-zpkg/pkgm authors.
+BSD-3-Clause © the go-zpkg/zpkgm authors.

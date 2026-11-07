@@ -319,11 +319,11 @@ func TestServiceLifecycle(t *testing.T) {
 	if !sd.active["authn-bridge@0.19.4.service"] || len(enabledVersions("authn-bridge")) != 1 {
 		t.Fatalf("after install: active=%v enabled=%v", sd.active, enabledVersions("authn-bridge"))
 	}
-	if su, err := os.ReadFile(filepath.Join(sysusersDir, "pkgm-authn-bridge.conf")); err != nil ||
+	if su, err := os.ReadFile(filepath.Join(sysusersDir, "zpkgm-authn-bridge.conf")); err != nil ||
 		!strings.Contains(string(su), "\nu authn-bridge - \"authn-bridge, an OpenID Connect provider in front of a SAML federation\" /var/lib/authn-bridge -\n") {
 		t.Errorf("sysusers: %s %v", su, err)
 	}
-	if !contains(sd.calls, "systemd-sysusers "+filepath.Join(sysusersDir, "pkgm-authn-bridge.conf")) {
+	if !contains(sd.calls, "systemd-sysusers "+filepath.Join(sysusersDir, "zpkgm-authn-bridge.conf")) {
 		t.Errorf("systemd-sysusers was not run: %v", sd.calls)
 	}
 	if !strings.Contains(out.String(), "authn-bridge@0.19.4.service is active") {
@@ -380,7 +380,7 @@ func TestServiceLifecycle(t *testing.T) {
 	err = cmdUninstall([]string{bridge}, prefix)
 	want := "refusing to uninstall: a service runs it, and nothing was removed:\n" +
 		"  authn-bridge@0.19.4.service (enabled, active) runs " + filepath.Join(store, bridge, "v0.19.4") + "\n" +
-		"run \"pkgm service remove authn-bridge\" first"
+		"run \"zpkgm service remove authn-bridge\" first"
 	if err == nil || err.Error() != want {
 		t.Fatalf("uninstall of a running service:\n got %v\nwant %s", err, want)
 	}
@@ -402,7 +402,7 @@ func TestServiceLifecycle(t *testing.T) {
 		t.Errorf("the store directory survived uninstall: %v", err)
 	}
 	out.Reset()
-	if err := serviceList(&out); err != nil || !strings.Contains(out.String(), "no pkgm services") {
+	if err := serviceList(&out); err != nil || !strings.Contains(out.String(), "no zpkgm services") {
 		t.Errorf("list of nothing: %q %v", out.String(), err)
 	}
 }
@@ -468,7 +468,7 @@ func TestInstallReportsAnInstanceThatDoesNotStayUp(t *testing.T) {
 
 // --- the uninstall refusal, case by case ---------------------------------------------------
 
-// writeTemplate puts a template on disk as pkgm would, and enables or starts
+// writeTemplate puts a template on disk as zpkgm would, and enables or starts
 // instances of it.
 func writeTemplate(t *testing.T, svc, firstLine, body string) {
 	t.Helper()
@@ -686,15 +686,15 @@ func TestServiceRefusesWithoutSystemd(t *testing.T) {
 		{"remove", "authn-bridge"},
 	} {
 		err := cmdService(args, &bytes.Buffer{})
-		want := "pkgm service " + args[0] + " needs systemd, and this system is not running it (" + systemdRunDir + " does not exist): " +
-			"a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `pkgm run`"
+		want := "zpkgm service " + args[0] + " needs systemd, and this system is not running it (" + systemdRunDir + " does not exist): " +
+			"a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkgm run`"
 		if err == nil || err.Error() != want {
 			t.Errorf("%v:\n got %v\nwant %s", args, err, want)
 		}
 	}
 	// list still answers, from the disk.
 	var out bytes.Buffer
-	if err := cmdService([]string{"list"}, &out); err != nil || !strings.Contains(out.String(), "no pkgm services") {
+	if err := cmdService([]string{"list"}, &out); err != nil || !strings.Contains(out.String(), "no zpkgm services") {
 		t.Errorf("list without systemd: %q %v", out.String(), err)
 	}
 }
@@ -746,7 +746,7 @@ func TestServiceInstallRefusals(t *testing.T) {
 	reachable = func(string, string) error { return nil }
 	// Somebody else's unit by the same name is left alone.
 	_ = os.WriteFile(filepath.Join(unitDir, "authn-bridge@.service"), []byte("[Unit]\n"), 0o644)
-	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by pkgm") {
+	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by zpkgm") {
 		t.Errorf("foreign template: %v", err)
 	}
 	// Another project's service by the same name, likewise.
@@ -755,8 +755,8 @@ func TestServiceInstallRefusals(t *testing.T) {
 		t.Errorf("another project's template: %v", err)
 	}
 	_ = os.Remove(filepath.Join(unitDir, "authn-bridge@.service"))
-	_ = os.WriteFile(filepath.Join(sysusersDir, "pkgm-authn-bridge.conf"), []byte("u x\n"), 0o644)
-	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by pkgm") {
+	_ = os.WriteFile(filepath.Join(sysusersDir, "zpkgm-authn-bridge.conf"), []byte("u x\n"), 0o644)
+	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by zpkgm") {
 		t.Errorf("foreign sysusers file: %v", err)
 	}
 }
@@ -768,10 +768,10 @@ func TestSwitchAndRollbackRefusals(t *testing.T) {
 	if err := cmdService([]string{"switch", bridge}, &out); err == nil || !strings.Contains(err.Error(), "needs a version") {
 		t.Errorf("switch without a version: %v", err)
 	}
-	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "not a pkgm service") {
+	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "not a zpkgm service") {
 		t.Errorf("switch of nothing: %v", err)
 	}
-	if err := cmdService([]string{"rollback", "authn-bridge"}, &out); err == nil || !strings.Contains(err.Error(), "not a pkgm service") {
+	if err := cmdService([]string{"rollback", "authn-bridge"}, &out); err == nil || !strings.Contains(err.Error(), "not a zpkgm service") {
 		t.Errorf("rollback of nothing: %v", err)
 	}
 	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &out); err != nil {
@@ -806,11 +806,11 @@ func TestSwitchAndRollbackRefusals(t *testing.T) {
 
 func TestServiceRemoveRefusals(t *testing.T) {
 	sd := withSystemd(t)
-	if err := cmdService([]string{"remove", "nope"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "not a pkgm service") {
+	if err := cmdService([]string{"remove", "nope"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "not a zpkgm service") {
 		t.Errorf("remove of nothing: %v", err)
 	}
 	writeTemplate(t, "d", "[Unit]", "")
-	if err := cmdService([]string{"remove", "d"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by pkgm") {
+	if err := cmdService([]string{"remove", "d"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by zpkgm") {
 		t.Errorf("remove of a foreign unit: %v", err)
 	}
 	writeTemplate(t, "d", "# pkgm-service project=acme.org/d store=/opt/pkgx", "")
@@ -871,7 +871,7 @@ func TestParseMarker(t *testing.T) {
 	if !ok || m != (unitMarker{project: "a.org/b", store: "/opt/pkgx", previous: "1.2.3"}) {
 		t.Errorf("%+v %v", m, ok)
 	}
-	for _, l := range []string{"", "[Unit]", "# pkgm-service store=/x", "# pkgm-service project=a", "#pkgm-service project=a store=/x"} {
+	for _, l := range []string{"", "[Unit]", "# pkgm-service store=/x", "# pkgm-service project=a", "#zpkgm-service project=a store=/x"} {
 		if _, ok := parseMarker(l); ok {
 			t.Errorf("%q parsed as a marker", l)
 		}

@@ -1,6 +1,6 @@
 # pkgm-service project=github.com/go-authn/bridge store=/opt/pkgx
 #
-# The account authn-bridge@.service runs as, written by `pkgm service install`.
+# The account authn-bridge@.service runs as, written by `zpkgm service install`.
 # A static account, not DynamicUser=: its files must keep one owner across
 # versions, reinstalls and restores.
 #

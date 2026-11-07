@@ -1,13 +1,19 @@
-// Command pkgm is a dependency-free, pure-Go installer for pkgx bottles.
+// Command zpkgm is a dependency-free, pure-Go package installer.
 //
-// It resolves a package's runtime dependency closure from the pkgx pantry,
-// downloads the bottles — from the signed OCI registry oci://ghcr.io/go-zpkg/packages
-// by default, verifying each bottle's signature (fail-closed) — and installs
-// them, with no runtime dependencies of its own (a single CGO_ENABLED=0 binary
-// that runs on a `FROM scratch` image). Point ZPKG_DIST at the unsigned upstream
-// (https://dist.pkgx.dev) with ZPKG_VERIFY=0 for the full pantry. It mirrors the
-// reference pkgm CLI so it is a drop-in replacement, and adds a shell-free `run`
-// for scratch images.
+// It resolves a package's runtime dependency closure from the pantry,
+// downloads the bottles — from our signed OCI registry (bottle.DistBase) by
+// default, verifying each signature, fail-closed — and installs them, with no
+// runtime dependencies of its own: a single CGO_ENABLED=0 binary that runs on
+// a `FROM scratch` image. ZPKG_DIST points it at another dist, e.g. a mirror
+// of your own.
+//
+// ⛔ IT IS NOT A DROP-IN REPLACEMENT FOR ANYTHING, and this comment used to
+// say it was ("mirrors the reference CLI so it is a drop-in replacement",
+// alongside "Point ZPKG_DIST at the unsigned upstream https://dist.pkgx.dev").
+// Compatibility with pkgx has been dropped (go-zpkg/packages#431): the
+// pantry, the recipe format and the distribution have parted, so a reader who
+// believed that sentence would plan a migration on it. The verbs are the
+// verbs; they match nobody by contract.
 package main
 
 import (
@@ -27,29 +33,29 @@ import (
 // testable without contriving an unreadable file.
 var osReadFile = os.ReadFile
 
-// version is reported by `pkgm --version`. It defaults to "dev" and is
+// version is reported by `zpkgm --version`. It defaults to "dev" and is
 // overridden at release-build time via -ldflags "-X main.version=<tag>".
 var version = "dev"
 
-var usage = `pkgm ` + version + ` — pure-Go pkgx package manager
+var usage = `zpkgm ` + version + ` — pure-Go package installer
 
 usage:
-  pkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
+  zpkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
                     -f <file>             ... or read the list from a file
-  pkgm uninstall|rm <pkg> ...             remove an installation (works offline)
-  pkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
-  pkgm list|ls                            list what's installed
-  pkgm outdated                           what has a newer version (exit 1 if any could not be checked)
-  pkgm update|up|upgrade                  update installations to latest
-  pkgm pin          <pkg>@version ...     install pinned to an exact version
-  pkgm run|x        <pkg> [-- args...]    run a pkg (shell-free; works FROM scratch)
-  pkgm image        <pkg>                 emit a FROM-scratch Containerfile that
-                                          installs <pkg> with pkgm, in the image
-  pkgm service install  <pkg>[@version]  run <pkg> as a systemd service, that version
-  pkgm service switch   <pkg>@version   move the service to another version
-  pkgm service rollback <svc>            return to the version before the last switch
-  pkgm service list                      which version each service runs
-  pkgm service remove   <svc>            stop and disable it, delete its unit
+  zpkgm uninstall|rm <pkg> ...             remove an installation (works offline)
+  zpkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
+  zpkgm list|ls                            list what's installed
+  zpkgm outdated                           what has a newer version (exit 1 if any could not be checked)
+  zpkgm update|up|upgrade                  update installations to latest
+  zpkgm pin          <pkg>@version ...     install pinned to an exact version
+  zpkgm run|x        <pkg> [-- args...]    run a pkg (shell-free; works FROM scratch)
+  zpkgm image        <pkg>                 emit a FROM-scratch Containerfile that
+                                          installs <pkg> with zpkgm, in the image
+  zpkgm service install  <pkg>[@version]  run <pkg> as a systemd service, that version
+  zpkgm service switch   <pkg>@version   move the service to another version
+  zpkgm service rollback <svc>            return to the version before the last switch
+  zpkgm service list                      which version each service runs
+  zpkgm service remove   <svc>            stop and disable it, delete its unit
 
 flags:
   -h, --help        show this help
@@ -92,7 +98,7 @@ type flags struct {
 }
 
 // parseArgs splits flags from positional arguments (getopt-style, matching the
-// reference pkgm's -h/-v/-p aliases) and captures the value-taking
+// reference zpkgm's -h/-v/-p aliases) and captures the value-taking
 // --prefix/-P <dir> (also accepts --prefix=<dir>).
 func parseArgs(argv []string) ([]string, flags) {
 	var f flags
@@ -155,11 +161,11 @@ func run(argv []string) int {
 	// A closure the resolver could not complete is not an error here — it is an
 	// error MUCH later, when the installed program starts and reports "cannot
 	// open shared object file". Print those diagnostics; bottle stays silent by
-	// default. It matters most for `pkgm image`, whose FROM-scratch output has
+	// default. It matters most for `zpkgm image`, whose FROM-scratch output has
 	// no host library to paper over the gap.
-	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "pkgm: "+msg) }
+	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkgm: "+msg) }
 	if err := configError(); err != nil {
-		fmt.Fprintln(os.Stderr, "pkgm: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkgm: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
 	}
 	pos, f := parseArgs(argv)
 	if f.help || (len(pos) > 0 && pos[0] == "help") {
@@ -167,11 +173,11 @@ func run(argv []string) int {
 		return 0
 	}
 	if f.showVersion {
-		// ⛔ THE BINARY SAYS ITS OWN NAME. After the rename, `pkgm` is not
+		// ⛔ THE BINARY SAYS ITS OWN NAME. After the rename, `zpkgm` is not
 		// merely the wrong name — upstream's installer is a different program
 		// that can now sit on the same PATH, which is the point of renaming
 		// ours. Measured on this machine: `zpkgm --version` answered
-		// `pkgm dev`.
+		// `zpkgm dev`.
 		fmt.Println("zpkgm " + version)
 		return 0
 	}
@@ -180,7 +186,7 @@ func run(argv []string) int {
 		return 2
 	}
 	if err := dispatch(pos[0], pos[1:], f); err != nil {
-		fmt.Fprintln(os.Stderr, "pkgm: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkgm: "+err.Error())
 		return 1
 	}
 	return 0
@@ -219,8 +225,8 @@ func dispatch(cmd string, args []string, f flags) error {
 // resolvePrefix decides where binaries are installed. Explicit wins:
 // --prefix flag, then $PKGM_PREFIX (both ideal for a `FROM scratch` image
 // where you are root, there is no sudo, and $HOME is unset). Otherwise it
-// mirrors the reference pkgm: /usr/local as root, else ~/.local. Being root is
-// a fully-supported first-class mode here — pkgm never nags to use sudo.
+// mirrors the reference zpkgm: /usr/local as root, else ~/.local. Being root is
+// a fully-supported first-class mode here — zpkgm never nags to use sudo.
 func resolvePrefix(f flags, forceLocal bool) string {
 	if f.prefix != "" {
 		return f.prefix
@@ -310,7 +316,7 @@ func cmdInstall(args []string, prefix string, f flags) error {
 		// shell, /bin/sh. A FROM-scratch image has neither, and anything that
 		// shells out dies without them — `make` runs every recipe line through
 		// /bin/sh, so a build inside such an image fails on the first one with
-		// "make: /bin/sh: No such file or directory". `pkgm run` already does
+		// "make: /bin/sh: No such file or directory". `zpkgm run` already does
 		// this at run time; an image built with -s needs it baked in.
 		if bottle.GOOS() == "linux" {
 			if loader := bottle.FindLoader(dir); loader != "" {
@@ -364,7 +370,7 @@ func cmdShim(args []string, prefix string) error {
 //
 // ⛔ IT USED TO ASK THE PANTRY WHAT TO DELETE, WHICH IS THE WRONG ORACLE AND
 // NEEDS THE NETWORK. Measured 2026-10-08 in a FROM-scratch container with
-// `--network none`: `pkgm uninstall gnu.org/bash` failed outright on a DNS
+// `--network none`: `zpkgm uninstall gnu.org/bash` failed outright on a DNS
 // lookup. You could not uninstall offline — and on a host whose pantry has
 // moved on, the names it fetched were the names the recipe provides TODAY,
 // not the ones we actually linked, so a `provides:` that changed since the
@@ -468,7 +474,7 @@ func removeStubsInto(binDir, storeDir, project string) ([]string, error) {
 // LD_LIBRARY_PATH holding EVERY library directory in the closure, so a
 // substring search over the whole file matches every sibling in the same
 // install. Measured 2026-10-08 in a FROM-scratch container:
-// `pkgm uninstall stedolan.github.io/jq` removed /opt/bin/onig-config too —
+// `zpkgm uninstall stedolan.github.io/jq` removed /opt/bin/onig-config too —
 // oniguruma's program, matched on jq's lib path inside its environment line.
 //
 // The unit test did not see it: its fixture wrote LD_LIBRARY_PATH="/x",

@@ -16,9 +16,9 @@ func TestWriteImage(t *testing.T) {
 		"FROM scratch\n",
 		"ENV ZPKG_DIR=/pkgx\n",
 		"ENV HOME=/root\n",
-		"COPY pkgm /pkgm\n",
-		`RUN ["/pkgm","install","-s","lz4.org"]` + "\n",
-		`ENTRYPOINT ["/pkgm","run","lz4.org","--"]` + "\n",
+		"COPY zpkgm /zpkgm\n",
+		`RUN ["/zpkgm","install","-s","lz4.org"]` + "\n",
+		`ENTRYPOINT ["/zpkgm","run","lz4.org","--"]` + "\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("Containerfile missing %q\n---\n%s", want, got)
@@ -41,13 +41,13 @@ func TestWriteImageOverlay(t *testing.T) {
 	if !strings.Contains(got, "ENV ZPKG_PANTRY_OVERLAY="+url+"\n") {
 		t.Errorf("overlay env missing:\n%s", got)
 	}
-	if strings.Index(got, "ZPKG_PANTRY_OVERLAY") > strings.Index(got, "COPY pkgm") {
+	if strings.Index(got, "ZPKG_PANTRY_OVERLAY") > strings.Index(got, "COPY zpkgm") {
 		t.Errorf("overlay env must precede COPY:\n%s", got)
 	}
 }
 
 // -glibc bakes the pin as ZPKG_GLIBC, so it holds for the install RUN AND for
-// every later `pkgm run` in the image; a leading "=" is not doubled.
+// every later `zpkgm run` in the image; a leading "=" is not doubled.
 func TestWriteImageGlibcPin(t *testing.T) {
 	for _, in := range []string{"2.28", "=2.28"} {
 		var b strings.Builder
@@ -58,7 +58,7 @@ func TestWriteImageGlibcPin(t *testing.T) {
 		if !strings.Contains(got, "ENV ZPKG_GLIBC=2.28\n") {
 			t.Errorf("glibc=%q: pin env missing:\n%s", in, got)
 		}
-		if strings.Index(got, "ZPKG_GLIBC") > strings.Index(got, "COPY pkgm") {
+		if strings.Index(got, "ZPKG_GLIBC") > strings.Index(got, "COPY zpkgm") {
 			t.Errorf("pin env must precede COPY (it governs the RUN):\n%s", got)
 		}
 	}
