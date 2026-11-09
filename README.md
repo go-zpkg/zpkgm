@@ -83,12 +83,12 @@ zpkgm service      install|switch|rollback|list|remove   run a daemon under syst
 flags: -h/--help  -v/--version  -p/--pin  -P/--prefix DIR  -s/--from-scratch
        -f/--file FILE   read packages from a file, one <pkg>[@version] per line
        --lock FILE      install exactly what a `bk lock` file pins
-env:   ZPKG_DIR     bottle store (default: ~/.pkgx, or <prefix>/pkgs when the
+env:   ZPKG_DIR     bottle store (default: ~/.zpkg, or <prefix>/pkgs when the
                     prefix is outside your home — see "A shim is a privilege
                     boundary")
        ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages, signed)
        ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on)
-       PKGM_PREFIX  default install prefix (ideal for FROM scratch)
+       ZPKGM_PREFIX  default install prefix (ideal for FROM scratch)
 ```
 
 By default `zpkgm install lz4.org` pulls from our signed OCI registry and
@@ -147,7 +147,7 @@ It now prints its totals every time, including the zeros, names what it could
 not reach, and exits **1** if anything went unchecked:
 
 ```sh
-$ docker run --rm --network none -v store:/pkgx zpkgm-scratch outdated
+$ docker run --rm --network none -v store:/zpkg zpkgm-scratch outdated
 zpkgm: 1 of 1 installed packages could not be checked
 
 could NOT be asked about — these are not an all-clear:
@@ -214,7 +214,7 @@ recipe states only what differs between daemons.
 `/etc/systemd/system/<svc>@.service` with
 
 ```ini
-ExecStart=/opt/pkgx/github.com/go-authn/bridge/v%i/bin/authn-bridge --config /etc/authn-bridge
+ExecStart=/opt/zpkg/github.com/go-authn/bridge/v%i/bin/authn-bridge --config /etc/authn-bridge
 ```
 
 so `authn-bridge@0.20.0.service` runs exactly 0.20.0. `systemctl status`
@@ -244,10 +244,10 @@ port, and none of these can. Measured: `authn-bridge@0.20.0` started beside
 
 The store must be one that the service's sandbox can see. `ProtectHome=` and
 `PrivateTmp=` hide `/home`, `/root`, `/run/user` and `/tmp`, so a root
-install with the default `ZPKG_DIR=/root/.pkgx` is refused, with a message
-that says why. Use `ZPKG_DIR=/opt/pkgx`, for example. It must also be a store
+install with the default `ZPKG_DIR=/root/.zpkg` is refused, with a message
+that says why. Use `ZPKG_DIR=/opt/zpkg`, for example. It must also be a store
 nobody else can write — the unit's `ExecStart` is run by root at every boot,
-so the same ownership rule as a shim applies, and `/opt/pkgx` owned by an
+so the same ownership rule as a shim applies, and `/opt/zpkg` owned by an
 ordinary user passes the sandbox check and fails that one. The program must be
 statically linked, because one unit serves every version and cannot carry
 one version's library path the way a stub does.
@@ -257,7 +257,7 @@ one version's library path the way a stub does.
 ```console
 $ sudo zpkgm install go.dev@1.27.3
 zpkgm: refusing to record store paths under /usr/local/bin:
-  /Users/you/.pkgx is owned by uid 501, and /usr/local/bin belongs to uid 0 —
+  /Users/you/.zpkg is owned by uid 501, and /usr/local/bin belongs to uid 0 —
   uid 501 could replace what gets run with root's privileges.
   Use a store that uid 0 controls: ZPKG_DIR=/usr/local/pkgs
 ```
@@ -267,7 +267,7 @@ it `exec`s and the `LD_LIBRARY_PATH` it exports. It runs with the privileges
 of whoever invokes it, so anyone who can write one of those paths can run
 code as that person.
 
-`ZPKG_DIR` defaults to `~/.pkgx`, and **macOS `sudo` keeps the caller's
+`ZPKG_DIR` defaults to `~/.zpkg`, and **macOS `sudo` keeps the caller's
 `HOME`** — so `sudo zpkgm install go.dev` used to write a root-owned
 `/usr/local/bin/go` pointing into an unprivileged user's home directory, and
 anything root ran through `go` after that executed a user-writable binary.
@@ -278,13 +278,13 @@ Two things changed, because either alone leaves a hole:
 - **The default follows the prefix.** With `ZPKG_DIR` unset, the store is
   `<prefix>/pkgs` whenever the prefix is not inside the home directory of the
   user zpkgm is running as. A plain `zpkgm install` into `~/.local` goes on
-  using `~/.pkgx`, so nothing moves for the ordinary case, and `ZPKG_DIR`
+  using `~/.zpkg`, so nothing moves for the ordinary case, and `ZPKG_DIR`
   still wins when you set it.
 - **The invariant is checked anyway.** `install`, `shim`, `update` and
   `service install` refuse when the store, any package prefix in it, any
   `LD_LIBRARY_PATH` directory, **or any directory above one of those** is
   owned by someone other than root or the prefix's owner, or is writable by
-  group or others. A default is not a boundary: `PKGM_PREFIX`, `--prefix` and
+  group or others. A default is not a boundary: `ZPKGM_PREFIX`, `--prefix` and
   `ZPKG_DIR` combine into configurations nobody enumerated.
 
 Root is always allowed, because root can replace the shim itself. The
@@ -312,7 +312,7 @@ zpkgm: zpkgm service install needs systemd, and this system is not running it (/
 ```
 $ zpkgm uninstall github.com/go-authn/bridge
 zpkgm: refusing to uninstall: a service runs it, and nothing was removed:
-  authn-bridge@0.20.0.service (enabled, active) runs /opt/pkgx/github.com/go-authn/bridge/v0.20.0
+  authn-bridge@0.20.0.service (enabled, active) runs /opt/zpkg/github.com/go-authn/bridge/v0.20.0
 run "zpkgm service remove authn-bridge" first
 ```
 
@@ -334,19 +334,19 @@ Only `uninstall` deletes version directories. `update` and `pin` install
 beside what is there. A test pins that, because the refusal guards
 `uninstall` alone.
 
-### `~/.pkgx/config.hcl2`
+### `~/.zpkg/config.hcl2`
 
 Rather than exporting the `ZPKG_*` (and OCI auth) variables every time, set
-their defaults declaratively in `~/.pkgx/config.hcl2`. It is a small
+their defaults declaratively in `~/.zpkg/config.hcl2`. It is a small
 [HCL2](https://github.com/hashicorp/hcl) file of top-level attributes; a real
 environment variable always overrides a value set here:
 
 ```hcl2
-# ~/.pkgx/config.hcl2 — defaults for the go-zpkg tools.
+# ~/.zpkg/config.hcl2 — defaults for the go-zpkg tools.
 # A real environment variable always overrides a value set here.
 ZPKG_DIST   = "oci://ghcr.io/go-zpkg/packages"  # signed registry (default)
 ZPKG_VERIFY = true                               # fail-closed signature check
-# ZPKG_DIR    = "/opt/pkgx"
+# ZPKG_DIR    = "/opt/zpkg"
 # ZPKG_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
 # OCI_TOKEN   = "..."                            # private-registry credentials
 ```
@@ -367,7 +367,7 @@ on an image with no system libc. Packages that ship a `#!/bin/sh` wrapper
 ```dockerfile
 FROM scratch
 COPY zpkgm /zpkgm
-ENV ZPKG_DIR=/pkgx
+ENV ZPKG_DIR=/zpkg
 ENTRYPOINT ["/zpkgm"]
 ```
 
@@ -410,18 +410,18 @@ Dockerfile:
 ```dockerfile
 FROM scratch
 COPY zpkgm /zpkgm
-ENV ZPKG_DIR=/pkgx
-ENV PKGM_PREFIX=/usr     # bins land in /usr/bin; no sudo, no HOME needed
+ENV ZPKG_DIR=/zpkg
+ENV ZPKGM_PREFIX=/usr     # bins land in /usr/bin; no sudo, no HOME needed
 ENTRYPOINT ["/zpkgm"]
 ```
 
 ```sh
-$ docker run --rm -e PKGM_PREFIX=/usr zpkgm-scratch install gnu.org/bash
+$ docker run --rm -e ZPKGM_PREFIX=/usr zpkgm-scratch install gnu.org/bash
   installed gnu.org/bash v5.3.0
 linked 2 binaries → /usr/bin
 ```
 
-Prefix precedence: `--prefix`/`-P` flag → `PKGM_PREFIX` → root ? `/usr/local` :
+Prefix precedence: `--prefix`/`-P` flag → `ZPKGM_PREFIX` → root ? `/usr/local` :
 `~/.local` (falling back to `/usr/local` when there is no usable `$HOME`).
 
 ### wrapper scripts

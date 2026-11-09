@@ -302,7 +302,7 @@ func TestServiceLifecycle(t *testing.T) {
 	sd := withSystemd(t)
 	store := withBridge(t)
 	prefix := t.TempDir()
-	t.Setenv("PKGM_PREFIX", prefix)
+	t.Setenv("ZPKGM_PREFIX", prefix)
 	var out bytes.Buffer
 
 	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &out); err != nil {
@@ -620,7 +620,7 @@ func TestOnlyUninstallRemovesFromTheStore(t *testing.T) {
 	})()
 	store := t.TempDir()
 	t.Setenv("ZPKG_DIR", store)
-	t.Setenv("PKGM_PREFIX", t.TempDir())
+	t.Setenv("ZPKGM_PREFIX", t.TempDir())
 	t.Setenv("PATH", "")
 	if err := dispatch("pin", []string{"acme.org/tool@1.0.0"}, flags{}); err != nil {
 		t.Fatal(err)

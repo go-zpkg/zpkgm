@@ -154,9 +154,56 @@ func TestDispatchUnknown(t *testing.T) {
 	}
 }
 
+// TestTheRetiredVariablesAreRefused is the gate on "no alias".
+//
+// ⛔⛔ Removing an alias quietly is its own defect, and the comment that used to
+// sit on prefixFromEnv named it: silently ignoring PKGM_PREFIX would move an
+// install from /usr to ~/.local with nothing said. So the old names are not
+// read AND not ignored — the command refuses, names the replacement, and stops
+// before anything decides where files land.
+//
+// The message is asserted, not just the exit code: a refusal that does not say
+// which variable or what to set instead sends the reader to the source.
+func TestTheRetiredVariablesAreRefused(t *testing.T) {
+	for old, want := range obsoleteEnv {
+		msg := refuseObsoleteEnv(func(k string) string {
+			if k == old {
+				return "/usr"
+			}
+			return ""
+		})
+		if msg == "" {
+			t.Errorf("%s set and nothing refused", old)
+			continue
+		}
+		if !strings.Contains(msg, old) || !strings.Contains(msg, want) {
+			t.Errorf("%s: the refusal does not name both %s and %s:\n%s", old, old, want, msg)
+		}
+	}
+	if msg := refuseObsoleteEnv(func(string) string { return "" }); msg != "" {
+		t.Errorf("nothing set and it refused anyway:\n%s", msg)
+	}
+	// Every one that is set is named, not just the first.
+	msg := refuseObsoleteEnv(func(string) string { return "x" })
+	for old := range obsoleteEnv {
+		if !strings.Contains(msg, old) {
+			t.Errorf("all set, and %s is missing from the refusal:\n%s", old, msg)
+		}
+	}
+}
+
+// TestTheRefusalStopsTheCommand wires it to the exit code, because a message on
+// stderr that does not stop the run is a warning, not a refusal.
+func TestTheRefusalStopsTheCommand(t *testing.T) {
+	t.Setenv("PKGM_PREFIX", "/usr")
+	if code := run([]string{"--version"}); code != 2 {
+		t.Errorf("exit %d with a retired variable set, want 2", code)
+	}
+}
+
 func TestResolvePrefix(t *testing.T) {
 	t.Setenv("HOME", "/tmp/h")
-	t.Setenv("PKGM_PREFIX", "")
+	t.Setenv("ZPKGM_PREFIX", "")
 	// forceLocal → ~/.local
 	if p := resolvePrefix(flags{}, true); p != "/tmp/h/.local" {
 		t.Errorf("forceLocal = %s", p)
@@ -165,26 +212,26 @@ func TestResolvePrefix(t *testing.T) {
 	if p := resolvePrefix(flags{prefix: "/opt/x"}, false); p != "/opt/x" {
 		t.Errorf("flag prefix = %s", p)
 	}
-	// PKGM_PREFIX env wins when no flag — the name released versions use,
-	// which must keep working: a Dockerfile or CI job written against one of
-	// them would otherwise install into ~/.local instead of /usr, silently.
-	t.Setenv("PKGM_PREFIX", "/usr")
+	// ZPKGM_PREFIX wins when there is no flag.
+	t.Setenv("ZPKGM_PREFIX", "/usr")
 	if p := resolvePrefix(flags{}, false); p != "/usr" {
 		t.Errorf("env prefix = %s", p)
 	}
-	// ZPKGM_PREFIX is the current spelling and wins over it.
-	t.Setenv("ZPKGM_PREFIX", "/opt/new")
-	if p := resolvePrefix(flags{}, false); p != "/opt/new" {
-		t.Errorf("ZPKGM_PREFIX did not win over PKGM_PREFIX: %s", p)
-	}
-	// And on its own.
-	t.Setenv("PKGM_PREFIX", "")
-	if p := resolvePrefix(flags{}, false); p != "/opt/new" {
-		t.Errorf("ZPKGM_PREFIX alone = %s", p)
-	}
+	// ⛔ AND THE RETIRED SPELLING DOES NOTHING. This block used to assert that
+	// PKGM_PREFIX still worked and that ZPKGM_PREFIX won over it; there is no
+	// precedence to assert any more, because there is only one name.
+	// TestTheRetiredVariablesAreRefused covers what happens when the old one is
+	// set.
 	t.Setenv("ZPKGM_PREFIX", "")
-	// non-root, no env/flag → ~/.local
+	t.Setenv("PKGM_PREFIX", "/opt/old")
+	if os.Geteuid() != 0 {
+		if p := resolvePrefix(flags{}, false); p != "/tmp/h/.local" {
+			t.Errorf("PKGM_PREFIX was honoured: %s", p)
+		}
+	}
 	t.Setenv("PKGM_PREFIX", "")
+	// non-root, no env/flag → ~/.local
+	t.Setenv("ZPKGM_PREFIX", "")
 	if os.Geteuid() != 0 {
 		if p := resolvePrefix(flags{}, false); p != "/tmp/h/.local" {
 			t.Errorf("nonroot default = %s", p)
@@ -229,7 +276,7 @@ func TestCommandsE2E(t *testing.T) {
 	// default is euid-dependent — root installs to /usr/local, which is a
 	// first-class mode here — so under a VM or container that runs as root this
 	// test looked for a stub under $HOME that zpkgm had correctly put elsewhere.
-	t.Setenv("PKGM_PREFIX", filepath.Join(home, ".local"))
+	t.Setenv("ZPKGM_PREFIX", filepath.Join(home, ".local"))
 
 	// install pinned 1.0.0 so outdated has something to report
 	if err := dispatch("install", []string{"acme.org/tool@1.0.0"}, flags{pin: true}); err != nil {
@@ -680,7 +727,7 @@ func TestUninstallLeavesTheClosureSiblingsAlone(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("ZPKG_DIR", store)
 	prefix := filepath.Join(home, ".local")
-	t.Setenv("PKGM_PREFIX", prefix)
+	t.Setenv("ZPKGM_PREFIX", prefix)
 	t.Setenv("PATH", filepath.Join(prefix, "bin"))
 
 	// ONE install, so both stubs share the closure's LD_LIBRARY_PATH — which

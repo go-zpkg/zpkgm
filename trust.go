@@ -17,10 +17,10 @@ import (
 // go.dev@1.27.3` wrote /usr/local/bin/go — root-owned, on root's PATH —
 // containing:
 //
-//	export LD_LIBRARY_PATH="/Users/<user>/.pkgx/go.dev/v1.27.3/lib:…"
-//	exec "/Users/<user>/.pkgx/go.dev/v1.27.3/bin/go" "$@"
+//	export LD_LIBRARY_PATH="/Users/<user>/.zpkg/go.dev/v1.27.3/lib:…"
+//	exec "/Users/<user>/.zpkg/go.dev/v1.27.3/bin/go" "$@"
 //
-// ZPKG_DIR defaults to ~/.pkgx and macOS sudo keeps the caller's HOME, so
+// ZPKG_DIR defaults to ~/.zpkg and macOS sudo keeps the caller's HOME, so
 // root's store resolved to an unprivileged user's home directory. Anything
 // root ran through `go` after that executed a user-writable binary and loaded
 // libraries from user-writable directories. /usr/local/pkgs was left empty.
@@ -37,7 +37,7 @@ import (
 //   - storeFor makes the default store follow the prefix, so the mistake is
 //     hard to make;
 //   - trustShimTargets refuses it whatever the environment, so the mistake is
-//     impossible to make. PKGM_PREFIX, --prefix and ZPKG_DIR can be combined
+//     impossible to make. ZPKGM_PREFIX, --prefix and ZPKG_DIR can be combined
 //     into configurations nobody enumerated, and a default is not a boundary.
 
 // storeFor is the bottle store an install into this prefix should use.
@@ -49,16 +49,16 @@ import (
 //
 // That last condition, rather than "euid == 0": under `sudo` the dangerous
 // thing is not being root, it is that HOME still belongs to somebody else. A
-// prefix outside HOME means the two can disagree, and ~/.pkgx is then the
+// prefix outside HOME means the two can disagree, and ~/.zpkg is then the
 // wrong answer no matter what euid says. A plain `zpkgm install` into ~/.local
-// keeps using ~/.pkgx, so nothing changes for the ordinary case.
+// keeps using ~/.zpkg, so nothing changes for the ordinary case.
 func storeFor(prefix string) string {
 	if bottle.Env("ZPKG_DIR") != "" {
 		return bottle.Dir()
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		// No usable HOME: a bare root container. ~/.pkgx would be "/.pkgx"
+		// No usable HOME: a bare root container. ~/.zpkg would be "/.zpkg"
 		// or worse, and the prefix is the only location we actually know.
 		return filepath.Join(prefix, "pkgs")
 	}

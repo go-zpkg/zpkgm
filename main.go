@@ -76,17 +76,21 @@ flags:
                     cannot be combined with named packages, -f, -p or -s.
 
 env:
-  ZPKG_DIR          bottle store (default: ~/.pkgx)
+  ZPKG_DIR          bottle store (default: ~/.zpkg)
   ZPKG_DIST         bottle source (default: oci://ghcr.io/go-zpkg/packages, the
                     signed registry; set https://dist.pkgx.dev for the full
                     unsigned upstream pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY       verify bottle signatures, fail-closed (default: on;
                     set 0/false/no/off to disable)
   ZPKGM_PREFIX      default install prefix (ideal for FROM scratch: be root,
-                    set ZPKGM_PREFIX=/usr, no sudo needed). PKGM_PREFIX, the
-                    name released versions used, still works
+                    set ZPKGM_PREFIX=/usr, no sudo needed)
 
-  ~/.pkgx/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
+  The names PKGM_PREFIX, PKGX_DIR, PKGX_DIST and PKGX_VERIFY are RETIRED and
+  not read as aliases. Setting one is refused, naming its replacement, rather
+  than acted on: honouring the old spelling would install somewhere you did
+  not ask for.
+
+  ~/.zpkg/config.hcl2 sets defaults for the ZPKG_* / OCI_* variables above
   (HCL2 attributes, e.g. ZPKG_DIST = "oci://ghcr.io/go-zpkg/packages"). A real
   environment variable always overrides a value set in the file.
 `
@@ -153,7 +157,7 @@ func parseArgs(argv []string) ([]string, flags) {
 
 func main() { os.Exit(run(os.Args[1:])) }
 
-// configError reports a load/parse failure of ~/.pkgx/config.hcl2, if any. It
+// configError reports a load/parse failure of ~/.zpkg/config.hcl2, if any. It
 // is a var so tests can drive the startup-warning path.
 var configError = bottle.ConfigError
 
@@ -165,8 +169,14 @@ func run(argv []string) int {
 	// default. It matters most for `zpkgm image`, whose FROM-scratch output has
 	// no host library to paper over the gap.
 	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkgm: "+msg) }
+	// ⛔ BEFORE ANYTHING ELSE, because the thing a retired variable would have
+	// changed is where files land, and that is decided below this line.
+	if msg := refuseObsoleteEnv(os.Getenv); msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		return 2
+	}
 	if err := configError(); err != nil {
-		fmt.Fprintln(os.Stderr, "zpkgm: warning: ignoring ~/.pkgx/config.hcl2: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkgm: warning: ignoring ~/.zpkg/config.hcl2: "+err.Error())
 	}
 	pos, f := parseArgs(argv)
 	if f.help || (len(pos) > 0 && pos[0] == "help") {
@@ -228,23 +238,55 @@ func dispatch(cmd string, args []string, f flags) error {
 // `FROM scratch` image where you are root, there is no sudo, and $HOME is
 // unset). Otherwise /usr/local as root, else ~/.local. Being root is a
 // fully-supported first-class mode here — zpkgm never nags to use sudo.
-// prefixFromEnv reads the install prefix, preferring the current spelling and
-// still honouring the old one.
+// prefixFromEnv reads the install prefix. One spelling, ZPKGM_PREFIX.
 //
-// ⛔ THE OLD NAME KEEPS WORKING, AND THAT IS THE POINT OF DOING IT THIS WAY.
-// The command is `zpkgm`, so the variable is ZPKGM_PREFIX; but PKGM_PREFIX is
-// what every Dockerfile, CI job and shell profile written against a released
-// zpkgm says, and silently ignoring it would move an install from /usr to
-// ~/.local with nothing said. A rename of a published interface is a
-// migration, not an edit: read both, prefer the new, document the new.
+// ⛔⛔ THE OLD NAME IS NOT AN ALIAS, AND IT IS NOT SILENTLY IGNORED EITHER.
+// This used to read PKGM_PREFIX as a fallback, and the argument for it was a
+// real hazard rather than a habit: silently ignoring the old name would move an
+// install from /usr to ~/.local with nothing said.
 //
-// The installer script does the same for its own knobs (ZPKGM_VERSION over
-// PKGM_VERSION), which is where the pattern comes from.
-func prefixFromEnv() string {
-	if p := os.Getenv("ZPKGM_PREFIX"); p != "" {
-		return p
+// Both halves of that are avoidable. An alias is its own cost — a tree with
+// both set is resolved by a precedence nobody can see, and every document has
+// to explain two spellings forever — so the old name is gone, and
+// [refuseObsoleteEnv] REFUSES when it is set instead of acting on it. Nothing
+// is honoured twice and nothing changes under anybody quietly; a reader who set
+// the old name is told the new one and the command stops.
+func prefixFromEnv() string { return os.Getenv("ZPKGM_PREFIX") }
+
+// obsoleteEnv maps a retired variable to the one that replaced it.
+//
+// ⛔ A RENAMED INTERFACE NEEDS A REFUSAL, NOT A FALLBACK. Each of these was a
+// published name; a user who set one gets told, once, what to set instead. They
+// are listed rather than pattern-matched so that retiring a name is a visible
+// edit to this table and not a consequence of a rule.
+var obsoleteEnv = map[string]string{
+	"PKGM_PREFIX": "ZPKGM_PREFIX",
+	"PKGX_DIR":    "ZPKG_DIR",
+	"PKGX_DIST":   "ZPKG_DIST",
+	"PKGX_VERIFY": "ZPKG_VERIFY",
+}
+
+// refuseObsoleteEnv reports every retired variable that is set, in a message
+// naming its replacement, or "" when none is.
+func refuseObsoleteEnv(look func(string) string) string {
+	var retired []string
+	for old := range obsoleteEnv {
+		if look(old) != "" {
+			retired = append(retired, old)
+		}
 	}
-	return os.Getenv("PKGM_PREFIX")
+	if len(retired) == 0 {
+		return ""
+	}
+	sort.Strings(retired)
+	var b strings.Builder
+	b.WriteString("zpkgm: refusing to run: these variables were renamed and are no longer read:\n")
+	for _, old := range retired {
+		fmt.Fprintf(&b, "  %s is now %s\n", old, obsoleteEnv[old])
+	}
+	b.WriteString("  Rename them. They are NOT honoured as aliases, so acting on the old\n")
+	b.WriteString("  name would install somewhere you did not ask for.")
+	return b.String()
 }
 
 func resolvePrefix(f flags, forceLocal bool) string {
