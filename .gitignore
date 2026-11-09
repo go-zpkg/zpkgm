@@ -1,5 +1,12 @@
-/pkgm
-/pkgm.*
+# ⛔⛔ THE BINARY'S NAME, AND IT WAS WRONG FOR AS LONG AS THE RENAME HAS BEEN
+# DONE. These lines said /pkgm and /pkgm.*, which is what the command used to be
+# called. After the rename to `zpkgm` nothing ignored the built binary any more,
+# and a 14 MB arm64 Mach-O executable went into the repository and is in HEAD
+# (blob e2ec8ed, 14 204 658 bytes). A rename is not finished when the code
+# compiles: every file that names the old thing by spelling rather than by
+# meaning stops working silently, and an ignore rule is the quietest of them.
+/zpkgm
+/zpkgm.*
 *.out
 bsd.test
 bsd-tests.list

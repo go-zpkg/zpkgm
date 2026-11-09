@@ -228,7 +228,7 @@ func TestInstallFromALockInstallsThePinnedVersions(t *testing.T) {
 	t.Setenv("ZPKG_DIR", dir)
 	t.Setenv("PATH", filepath.Join(home, ".local", "bin"))
 	prefix := filepath.Join(home, ".local")
-	t.Setenv("PKGM_PREFIX", prefix)
+	t.Setenv("ZPKGM_PREFIX", prefix)
 
 	// ⛔ THE LOCK PINS THE OLDER VERSION ON PURPOSE. 2.0.0 is published and is
 	// what any resolution would choose, so if the lock were resolved rather
