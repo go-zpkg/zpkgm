@@ -27,7 +27,7 @@ jobs:
       #     error: pathspec 'v0.3.10' did not match any file(s) known to git
       #
       # Measured 2026-10-09 on go-zpkg/mirror, immediately after adding that
-      # checkout: `git checkout "$tag"` was taken from go-zpkg/bk without the
+      # checkout: `git checkout "$tag"` was taken from go-zpkg/zbk without the
       # `fetch-depth: 0` beside it. Half of a pair.
       - uses: actions/checkout@v7
         with:
@@ -72,10 +72,10 @@ jobs:
       # Measured on the published v0.2.10 assets, which is also the shape of
       # the trap: the FIRST target is clean and the rest are not.
       #
-      #   pkgm-linux-amd64    v0.2.10
-      #   pkgm-linux-arm64    v0.2.10+dirty
-      #   pkgm-darwin-amd64   v0.2.10+dirty
-      #   pkgm-darwin-arm64   v0.2.10+dirty
+      #   zpkgm-linux-amd64    v0.2.10
+      #   zpkgm-linux-arm64    v0.2.10+dirty
+      #   zpkgm-darwin-amd64   v0.2.10+dirty
+      #   zpkgm-darwin-arm64   v0.2.10+dirty
       #
       # An empty directory is invisible to git, so `mkdir dist` alone is
       # harmless — it is the first `-o dist/...` that does it. A guard that
@@ -159,10 +159,10 @@ jobs:
       # Sigstore, a statement that THIS workflow built THAT file from THAT
       # commit, and `gh attestation verify -R go-zpkg/zpkgm <file>` checks it.
       #
-      # Measured 2026-10-20 on go-zpkg/pkgx v0.23.1, with go-fleettools'
+      # Measured 2026-10-20 on go-zpkg/zpkgx v0.23.1, with go-fleettools'
       # relverify: twelve files, every checksum right, and every attestation
       # lookup `HTTP 404: Not Found`. The same was true here, and of
-      # go-zpkg/bk and go-zpkg/mirror — one organisation publishing binaries
+      # go-zpkg/zbk and go-zpkg/mirror — one organisation publishing binaries
       # that verify as far as a manifest can take them and no further.
       #
       # It runs AFTER the stamp guard and BEFORE publishing: nothing

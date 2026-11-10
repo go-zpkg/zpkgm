@@ -82,7 +82,7 @@ zpkgm service      install|switch|rollback|list|remove   run a daemon under syst
 
 flags: -h/--help  -v/--version  -p/--pin  -P/--prefix DIR  -s/--from-scratch
        -f/--file FILE   read packages from a file, one <pkg>[@version] per line
-       --lock FILE      install exactly what a `bk lock` file pins
+       --lock FILE      install exactly what a `zbk lock` file pins
 env:   ZPKG_DIR     bottle store (default: ~/.zpkg, or <prefix>/pkgs when the
                     prefix is outside your home — see "A shim is a privilege
                     boundary")
@@ -115,7 +115,7 @@ Naming versions does not pin them. The same pantry commit resolved tcl to
 only the day. A lock is the file that answers "which versions, exactly", the
 way Nix's `flake.lock`, Guix's `channels.scm` and Spack's concretized specs do.
 
-`bk lock` has written these for a while, and `bk factory --lock` **builds**
+`zbk lock` has written these for a while, and `zbk factory --lock` **builds**
 them. Until now nothing could **install** one, which made the lock a record of
 a build rather than a way to repeat it.
 
@@ -128,13 +128,13 @@ It refuses rather than guesses, in three cases:
 
 | refused | why |
 |---|---|
-| a lock pinning `recipes` versions | those are the newest the recipes can **build**, not the newest **published** — measured upstream at 2 of 5 pins for curl.se on linux/aarch64. Write it with `bk lock -runnable`. A lock with no `pinned` field is a `recipes` lock: that is what every file written before the field existed holds |
+| a lock pinning `recipes` versions | those are the newest the recipes can **build**, not the newest **published** — measured upstream at 2 of 5 pins for curl.se on linux/aarch64. Write it with `zbk lock -runnable`. A lock with no `pinned` field is a `recipes` lock: that is what every file written before the field existed holds |
 | a lock taken on another platform | the platform **changes the answer**; where versions happen to coincide it would otherwise succeed and give a set nobody locked |
 | `--lock` beside packages, `-f`, `-p` or `-s` | a lock is the whole set, not a floor to add to. `-s` in particular adds the implicit system libraries, which the lock does not pin — so the result would not be the locked set while still reading as a locked install |
 
 The last row is the one that costs something: making a `FROM scratch` image
 reproducible needs those implicit libraries pinned **in the lock**, which is a
-change to `bk lock` rather than a flag combination here.
+change to `zbk lock` rather than a flag combination here.
 
 ### `outdated` does not confuse "nothing to do" with "I could not ask"
 
@@ -359,9 +359,9 @@ back to environment variables and built-in defaults).
 
 `run` installs a package's full closure (its declared deps plus the implicit
 libc/gcc libraries — see [automatic closure completion](#automatic-closure-completion))
-and makes the pkgx loader available at `/lib/ld-linux`, so the binary runs even
-on an image with no system libc. Packages that ship a `#!/bin/sh` wrapper
-(git, …) also get the pkgx bash + coreutils — see
+and makes the glibc bottle's own loader available at `/lib/ld-linux`, so the
+binary runs even on an image with no system libc. Packages that ship a
+`#!/bin/sh` wrapper (git, …) also get the bottled bash + coreutils — see
 [wrapper scripts](#wrapper-scripts).
 
 ```dockerfile
@@ -426,14 +426,14 @@ Prefix precedence: `--prefix`/`-P` flag → `ZPKGM_PREFIX` → root ? `/usr/loca
 
 ### wrapper scripts
 
-Some pkgx tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
+Some bottled tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
 that set up env and exec the real ELF. On `FROM scratch` there is no shell — so
-zpkgm, being a package manager, **installs the pkgx `gnu.org/bash` +
+zpkgm, being a package manager, **installs the bottled `gnu.org/bash` +
 `gnu.org/coreutils`** and points `/bin/sh` at that real bash (and puts coreutils
-like `dirname` on `PATH`). It also symlinks the pkgx loader to `/lib/ld-linux`
-(best-effort; a no-op on a normal system) so every bottle ELF — the wrapper's
-target and any children — resolves its `PT_INTERP` natively. Using the real
-pkgx bash (rather than reimplementing a shell) means the wrappers get exactly
+like `dirname` on `PATH`). It also symlinks the glibc bottle's own loader to
+`/lib/ld-linux` (best-effort; a no-op on a normal system) so every bottle ELF —
+the wrapper's target and any children — resolves its `PT_INTERP` natively.
+Using a real bash (rather than reimplementing a shell) means the wrappers get exactly
 the `set -e` semantics they rely on. That is how `git` runs on scratch.
 
 ### a package with no command
@@ -492,8 +492,8 @@ from the host architecture cannot stand in for a run that never happened.
 ## FROM scratch conformance
 
 See [docs/FROM_SCRATCH.md](docs/FROM_SCRATCH.md) for the package conformance
-matrix, the maintained `soname → project` fix list, and a proposal to the pkgx
-maintainers to publish complete runtime closures.
+matrix, the maintained `soname → project` fix list, and a proposal to the
+upstream pkgx maintainers to publish complete runtime closures.
 
 ## License
 
