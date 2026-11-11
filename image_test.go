@@ -14,7 +14,7 @@ func TestWriteImage(t *testing.T) {
 	got := b.String()
 	for _, want := range []string{
 		"FROM scratch\n",
-		"ENV ZPKG_DIR=/pkgx\n",
+		"ENV ZPKG_DIR=/zpkg\n",
 		"ENV HOME=/root\n",
 		"COPY zpkgm /zpkgm\n",
 		`RUN ["/zpkgm","install","-s","lz4.org"]` + "\n",

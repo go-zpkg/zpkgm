@@ -20,7 +20,8 @@ import (
 // zpkgm is a static CGO_ENABLED=0 binary that already runs on `FROM scratch`, so
 // it bootstraps the entire userland from within the image: the `RUN` step pulls
 // the closure over HTTPS (zpkgm's embedded CA + net/http) straight into the
-// image and wires the pkgx loader (bottle.SetupScratchRootfs). There is no
+// image and wires the glibc bottle's own loader (bottle.SetupScratchRootfs).
+// There is no
 // host-side rootfs staging and no manual loader symlink — the `RUN` step IS the
 // from-scratch install (and, in CI, the proof that the published bottles are
 // self-sufficient with no system libc).
@@ -54,7 +55,12 @@ func writeImage(w io.Writer, args []string, overlay, glibc string) error {
 	// where there is no /bin/sh. json.Marshal escapes the args safely.
 	var b strings.Builder
 	fmt.Fprintln(&b, "FROM scratch")
-	fmt.Fprintln(&b, "ENV ZPKG_DIR=/pkgx")
+	// ⛔ /zpkg, NOT /pkgx. This is the store root baked into every image this
+	// command generates — a retired name shipped in an artifact, which is the
+	// one place it cannot be read as a historical note. Nothing hardcodes the
+	// path: the image refers to it only through $ZPKG_DIR, so the value moves
+	// in one edit.
+	fmt.Fprintln(&b, "ENV ZPKG_DIR=/zpkg")
 	fmt.Fprintln(&b, "ENV HOME=/root")
 	if overlay != "" {
 		fmt.Fprintln(&b, "ENV ZPKG_PANTRY_OVERLAY="+overlay)
