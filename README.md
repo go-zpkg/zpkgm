@@ -128,7 +128,7 @@ It refuses rather than guesses, in three cases:
 
 | refused | why |
 |---|---|
-| a lock pinning `recipes` versions | those are the newest the recipes can **build**, not the newest **published** — measured upstream at 2 of 5 pins for curl.se on linux/aarch64. Write it with `zbk lock -runnable`. A lock with no `pinned` field is a `recipes` lock: that is what every file written before the field existed holds |
+| a lock pinning `recipes` versions | those are the newest the recipes can **build**, not the newest **published** — measured at 2 of 5 pins for curl.se on linux/aarch64. Write it with `zbk lock -runnable`. A lock with no `pinned` field is a `recipes` lock: that is what every file written before the field existed holds |
 | a lock taken on another platform | the platform **changes the answer**; where versions happen to coincide it would otherwise succeed and give a set nobody locked |
 | `--lock` beside packages, `-f`, `-p` or `-s` | a lock is the whole set, not a floor to add to. `-s` in particular adds the implicit system libraries, which the lock does not pin — so the result would not be the locked set while still reading as a locked install |
 
@@ -493,7 +493,7 @@ from the host architecture cannot stand in for a run that never happened.
 
 See [docs/FROM_SCRATCH.md](docs/FROM_SCRATCH.md) for the package conformance
 matrix, the maintained `soname → project` fix list, and a proposal to the
-upstream pkgx maintainers to publish complete runtime closures.
+pkgx maintainers to publish complete runtime closures.
 
 ## License
 
