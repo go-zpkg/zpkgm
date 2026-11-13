@@ -61,9 +61,9 @@ jobs:
 
       # Cross-compile the pure-Go CGO_ENABLED=0 binary for every
       # {linux,darwin,windows} x {amd64,arm64} target, name the assets
-      # zpkgm-<os>-<arch> (windows: .exe), and record a SHA256SUMS manifest.
+      # zpkm-<os>-<arch> (windows: .exe), and record a SHA256SUMS manifest.
       # The release version (tag without the leading "v") is injected into
-      # main.version via -ldflags so `zpkgm --version` matches the tag.
+      # main.version via -ldflags so `zpkm --version` matches the tag.
       # ⛔ dist/ MUST NOT LIVE IN THE CHECKOUT. Go stamps the main module
       # from the work tree's VCS state, so the moment the first binary lands
       # in an untracked dist/ the tree is dirty and every LATER build in this
@@ -72,10 +72,10 @@ jobs:
       # Measured on the published v0.2.10 assets, which is also the shape of
       # the trap: the FIRST target is clean and the rest are not.
       #
-      #   zpkgm-linux-amd64    v0.2.10
-      #   zpkgm-linux-arm64    v0.2.10+dirty
-      #   zpkgm-darwin-amd64   v0.2.10+dirty
-      #   zpkgm-darwin-arm64   v0.2.10+dirty
+      #   zpkm-linux-amd64    v0.2.10
+      #   zpkm-linux-arm64    v0.2.10+dirty
+      #   zpkm-darwin-amd64   v0.2.10+dirty
+      #   zpkm-darwin-arm64   v0.2.10+dirty
       #
       # An empty directory is invisible to git, so `mkdir dist` alone is
       # harmless — it is the first `-o dist/...` that does it. A guard that
@@ -93,7 +93,7 @@ jobs:
             windows/amd64 windows/arm64; do
             os=${target%/*}
             arch=${target#*/}
-            out="zpkgm-${os}-${arch}"
+            out="zpkm-${os}-${arch}"
             if [ "$os" = "windows" ]; then
               out="${out}.exe"
             fi
@@ -102,7 +102,7 @@ jobs:
               go build -trimpath -ldflags="-s -w -X main.version=${TAG#v}" -o "$DIST/${out}" .
           done
           cd "$DIST"
-          sha256sum zpkgm-* > SHA256SUMS
+          sha256sum zpkm-* > SHA256SUMS
           cat SHA256SUMS
 
       # EVERY binary, not one, and EQUALITY, not "contains the tag".
@@ -116,7 +116,7 @@ jobs:
           DIST="$RUNNER_TEMP/dist"
           want="${TAG#v}"
           bad=0
-          for bin in "$DIST"/zpkgm-*; do
+          for bin in "$DIST"/zpkm-*; do
             name=$(basename "$bin")
             info=$(go version -m "$bin")
             mod=$(printf '%s\n' "$info" | awk '$1=="mod" {print $3; exit}')
@@ -144,9 +144,9 @@ jobs:
           done
           # And the version it PRINTS: the ldflags stamp is what users see,
           # and it is set independently of the build info above.
-          got=$("$DIST/zpkgm-linux-amd64" --version | awk '{print $2}')
+          got=$("$DIST/zpkm-linux-amd64" --version | awk '{print $2}')
           if [ "$got" != "$want" ]; then
-            echo "::error::zpkgm --version says '$got', want exactly '$want'"
+            echo "::error::zpkm --version says '$got', want exactly '$want'"
             bad=1
           fi
           exit "$bad"
@@ -157,7 +157,7 @@ jobs:
       # would replace the manifest. A provenance attestation is the half
       # that cannot be forged from the release page — GitHub signs, through
       # Sigstore, a statement that THIS workflow built THAT file from THAT
-      # commit, and `gh attestation verify -R go-zpkg/zpkgm <file>` checks it.
+      # commit, and `gh attestation verify -R go-zpkg/zpkm <file>` checks it.
       #
       # Measured 2026-10-20 on go-zpkg/zpkgx v0.23.1, with go-fleettools'
       # relverify: twelve files, every checksum right, and every attestation
@@ -172,7 +172,7 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            ${{ runner.temp }}/dist/zpkgm-*
+            ${{ runner.temp }}/dist/zpkm-*
             ${{ runner.temp }}/dist/SHA256SUMS
 
       - name: Publish GitHub Release
@@ -187,5 +187,5 @@ jobs:
           else
             gh release create "$TAG" "$DIST"/* \
               --title "$TAG" \
-              --notes "Static, dependency-free zpkgm binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. Verify downloads against SHA256SUMS. Install THIS release with: curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- zpkgm $TAG"
+              --notes "Static, dependency-free zpkm binaries (CGO_ENABLED=0) for linux, darwin and windows on amd64 and arm64. Verify downloads against SHA256SUMS. Install THIS release with: curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- zpkm $TAG"
           fi

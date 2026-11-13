@@ -45,7 +45,7 @@ func cmdRun(args []string) error {
 	var pathDirs []string
 	// If the target is a "#!/bin/sh" wrapper (pkgx wraps git, perl tools, …),
 	// install the pkgx bash + coreutils and run it under those real tools —
-	// zpkgm is a package manager, not a shell. A real bash has the dash/bash
+	// zpkm is a package manager, not a shell. A real bash has the dash/bash
 	// set -e semantics the wrappers rely on, and coreutils provides dirname etc.
 	if artifact.GOOS() == "linux" && !artifact.IsELF(binPath) {
 		if sh, err := artifact.CompleteClosure(map[string]string{"gnu.org/bash": "*", "gnu.org/coreutils": "*"}, dir); err == nil {
@@ -101,11 +101,11 @@ func cmdRun(args []string) error {
 //
 // ⛔ THE NAME OF THE BINARY IS A GUESS WHEN A PACKAGE DECLARES NOTHING.
 // BinNames falls back to the project's leaf name for a recipe with no
-// `provides:`, so `zpkgm run zlib.net` looked for a program called "zlib.net"
+// `provides:`, so `zpkm run zlib.net` looked for a program called "zlib.net"
 // — a file nobody had ever mentioned. Handing that path to exec produced the
 // kernel's own answer and nothing else:
 //
-//	zpkgm: no such file or directory
+//	zpkm: no such file or directory
 //
 // That sentence names neither the package, nor the file, nor the only fact
 // that matters: zlib is a LIBRARY. Measured 2026-10-08 in a FROM-scratch
@@ -129,7 +129,7 @@ func checkRunnable(project string, provides []string, binPath string) error {
 		return nil
 	}
 	if len(provides) == 0 {
-		return fmt.Errorf("%s provides no command: it is a library, not a program — `zpkgm install %s` installs its files, but there is nothing to run", project, project)
+		return fmt.Errorf("%s provides no command: it is a library, not a program — `zpkm install %s` installs its files, but there is nothing to run", project, project)
 	}
 	return fmt.Errorf("%s declares %s, but %s is not in the installed artifact", project, strings.Join(provides, ", "), binPath)
 }

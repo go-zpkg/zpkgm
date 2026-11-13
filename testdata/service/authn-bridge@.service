@@ -1,7 +1,7 @@
 # pkgm-service project=github.com/go-authn/bridge store=/opt/zpkg
 #
-# Written by `zpkgm service install` from the service block of the
-# github.com/go-authn/bridge recipe. zpkgm rewrites this file: put local changes
+# Written by `zpkm service install` from the service block of the
+# github.com/go-authn/bridge recipe. zpkm rewrites this file: put local changes
 # in a drop-in instead (systemctl edit authn-bridge@.service).
 #
 # The instance is the VERSION: authn-bridge@<version>.service runs

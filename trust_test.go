@@ -16,7 +16,7 @@ func resolved(t *testing.T, project, version string) []artifact.Resolved {
 	return []artifact.Resolved{{Project: project, Version: artifact.ParseVer(version)}}
 }
 
-// ⛔ TestRootStoreDoesNotFollowTheCallersHome is go-zpkg/zpkgm#73's first half.
+// ⛔ TestRootStoreDoesNotFollowTheCallersHome is go-zpkg/zpkm#73's first half.
 // macOS `sudo` keeps the caller's HOME, so ~/.zpkg resolved to an
 // unprivileged user's home and root's shim pointed into it.
 func TestRootStoreDoesNotFollowTheCallersHome(t *testing.T) {
@@ -33,7 +33,7 @@ func TestRootStoreDoesNotFollowTheCallersHome(t *testing.T) {
 }
 
 // TestAHomePrefixKeepsTheHomeStore: the ordinary case must not move. A plain
-// `zpkgm install` into ~/.local goes on using ~/.zpkg, or every existing
+// `zpkm install` into ~/.local goes on using ~/.zpkg, or every existing
 // install on every developer machine is suddenly in the wrong place.
 func TestAHomePrefixKeepsTheHomeStore(t *testing.T) {
 	home := t.TempDir()
@@ -104,7 +104,7 @@ func TestAForeignOwnedStoreIsRefused(t *testing.T) {
 }
 
 // TestAUserOwnedStoreIsFineForThatUser: the same arrangement one level down is
-// correct and must pass, or an ordinary `zpkgm install` fails for everybody.
+// correct and must pass, or an ordinary `zpkm install` fails for everybody.
 func TestAUserOwnedStoreIsFineForThatUser(t *testing.T) {
 	withOwners(t, func(string) (uint32, fs.FileMode, error) {
 		return 501, 0o755 | fs.ModeDir, nil

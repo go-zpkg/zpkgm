@@ -18,12 +18,12 @@ jobs:
   #   GO-2026-6613 stdlib.Do         GO-2026-6611 stdlib.Read
   #   GO-2026-6610 stdlib.RoundTrip  GO-2026-6605 stdlib.Do
   #
-  # Reachable, not merely present: zpkgm installs packages over HTTP, so those
+  # Reachable, not merely present: zpkm installs packages over HTTP, so those
   # are its own paths.
   #
   # ⛔ AND THE `go` DIRECTIVE IS THE TOOLCHAIN. The lane always pinned
   # go-version 1.27.2, so what CI built was never vulnerable -- but `go
-  # install github.com/go-zpkg/zpkgm@main`, which is how every factory
+  # install github.com/go-zpkg/zpkm@main`, which is how every factory
   # workflow in go-zpkg/packages gets this binary, builds with the RUNNER's
   # toolchain. Raising the directive alone took this module from 22 findings
   # to 1, a notice with no released fix.
@@ -96,12 +96,12 @@ jobs:
         with:
           go-version: '1.27.4'
       # A CGO_ENABLED=0 build must be fully static on every 64-bit target,
-      # so zpkgm can ship on a `FROM scratch` image for each arch.
+      # so zpkm can ship on a `FROM scratch` image for each arch.
       - env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -ldflags='-s -w' -o zpkgm-${{ matrix.goos }}-${{ matrix.goarch }} .
+        run: go build -ldflags='-s -w' -o zpkm-${{ matrix.goos }}-${{ matrix.goarch }} .
 
   emulated:
     name: test (${{ matrix.goarch }}, qemu)

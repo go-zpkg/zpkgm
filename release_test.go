@@ -37,7 +37,7 @@ func TestTheReleaseAttestsWhatItPublishes(t *testing.T) {
 		"id-token: write",
 		"attestations: write",
 		"contents: write",
-		"dist/zpkgm-*",
+		"dist/zpkm-*",
 		"dist/SHA256SUMS",
 	} {
 		if !strings.Contains(wf, want) {
