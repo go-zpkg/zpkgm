@@ -103,7 +103,7 @@ func TestParseArgs(t *testing.T) {
 	if !f2.showVersion {
 		t.Error("want showVersion")
 	}
-	// After "--", tool flags must pass through, NOT be parsed as zpkgm's own.
+	// After "--", tool flags must pass through, NOT be parsed as zpkm's own.
 	pos3, f3 := parseArgs([]string{"run", "nodejs.org", "--", "--version", "-h"})
 	if f3.showVersion || f3.help {
 		t.Errorf("flags after -- were stolen: %+v", f3)
@@ -194,16 +194,27 @@ func TestTheRetiredVariablesAreRefused(t *testing.T) {
 
 // TestTheRefusalStopsTheCommand wires it to the exit code, because a message on
 // stderr that does not stop the run is a warning, not a refusal.
+//
+// ⛔⛔ EVERY RETIRED GENERATION IS A CASE, AND THE NEWEST IS THE ONE A RENAME
+// FORGETS. Before `zpkgm` -> `zpkm` this test set PKGM_PREFIX only, and it
+// would have stayed green while ZPKGM_PREFIX — the spelling every profile,
+// Dockerfile and CI job written against a released zpkgm uses — fell through
+// to the default prefix with nothing said. A rename adds a case here at the
+// same time as it adds a row to obsoleteEnv.
 func TestTheRefusalStopsTheCommand(t *testing.T) {
-	t.Setenv("PKGM_PREFIX", "/usr")
-	if code := run([]string{"--version"}); code != 2 {
-		t.Errorf("exit %d with a retired variable set, want 2", code)
+	for _, old := range []string{"ZPKGM_PREFIX", "PKGM_PREFIX"} {
+		t.Run(old, func(t *testing.T) {
+			t.Setenv(old, "/usr")
+			if code := run([]string{"--version"}); code != 2 {
+				t.Errorf("exit %d with %s set, want 2", code, old)
+			}
+		})
 	}
 }
 
 func TestResolvePrefix(t *testing.T) {
 	t.Setenv("HOME", "/tmp/h")
-	t.Setenv("ZPKGM_PREFIX", "")
+	t.Setenv("ZPKM_PREFIX", "")
 	// forceLocal → ~/.local
 	if p := resolvePrefix(flags{}, true); p != "/tmp/h/.local" {
 		t.Errorf("forceLocal = %s", p)
@@ -212,17 +223,17 @@ func TestResolvePrefix(t *testing.T) {
 	if p := resolvePrefix(flags{prefix: "/opt/x"}, false); p != "/opt/x" {
 		t.Errorf("flag prefix = %s", p)
 	}
-	// ZPKGM_PREFIX wins when there is no flag.
-	t.Setenv("ZPKGM_PREFIX", "/usr")
+	// ZPKM_PREFIX wins when there is no flag.
+	t.Setenv("ZPKM_PREFIX", "/usr")
 	if p := resolvePrefix(flags{}, false); p != "/usr" {
 		t.Errorf("env prefix = %s", p)
 	}
 	// ⛔ AND THE RETIRED SPELLING DOES NOTHING. This block used to assert that
-	// PKGM_PREFIX still worked and that ZPKGM_PREFIX won over it; there is no
+	// PKGM_PREFIX still worked and that ZPKM_PREFIX won over it; there is no
 	// precedence to assert any more, because there is only one name.
 	// TestTheRetiredVariablesAreRefused covers what happens when the old one is
 	// set.
-	t.Setenv("ZPKGM_PREFIX", "")
+	t.Setenv("ZPKM_PREFIX", "")
 	t.Setenv("PKGM_PREFIX", "/opt/old")
 	if os.Geteuid() != 0 {
 		if p := resolvePrefix(flags{}, false); p != "/tmp/h/.local" {
@@ -231,7 +242,7 @@ func TestResolvePrefix(t *testing.T) {
 	}
 	t.Setenv("PKGM_PREFIX", "")
 	// non-root, no env/flag → ~/.local
-	t.Setenv("ZPKGM_PREFIX", "")
+	t.Setenv("ZPKM_PREFIX", "")
 	if os.Geteuid() != 0 {
 		if p := resolvePrefix(flags{}, false); p != "/tmp/h/.local" {
 			t.Errorf("nonroot default = %s", p)
@@ -275,8 +286,8 @@ func TestCommandsE2E(t *testing.T) {
 	// Name the prefix rather than inheriting resolvePrefix's default. That
 	// default is euid-dependent — root installs to /usr/local, which is a
 	// first-class mode here — so under a VM or container that runs as root this
-	// test looked for a stub under $HOME that zpkgm had correctly put elsewhere.
-	t.Setenv("ZPKGM_PREFIX", filepath.Join(home, ".local"))
+	// test looked for a stub under $HOME that zpkm had correctly put elsewhere.
+	t.Setenv("ZPKM_PREFIX", filepath.Join(home, ".local"))
 
 	// install pinned 1.0.0 so outdated has something to report
 	if err := dispatch("install", []string{"acme.org/tool@1.0.0"}, flags{pin: true}); err != nil {
@@ -446,8 +457,8 @@ func TestParseArgsFileFlag(t *testing.T) {
 
 // ⛔ A LIBRARY HAS NO COMMAND, AND THE KERNEL CANNOT SAY SO. Measured
 // 2026-10-08 against the real registry in a FROM-scratch image:
-// `zpkgm run zlib.net -- --version` downloaded the entire closure and then
-// printed "zpkgm: no such file or directory". zlib.net declares `provides: []`,
+// `zpkm run zlib.net -- --version` downloaded the entire closure and then
+// printed "zpkm: no such file or directory". zlib.net declares `provides: []`,
 // so the binary name was invented from the project's leaf name and exec'd
 // blind. The message names neither the package nor the reason.
 func TestRunRefusesAPackageWithNoCommand(t *testing.T) {
@@ -514,7 +525,7 @@ func TestRunAcceptsABinaryThatIsThere(t *testing.T) {
 
 // ⛔ AN ANSWER IT NEVER OBTAINED MUST NOT READ AS A NEGATIVE. Measured
 // 2026-10-08 in a FROM-scratch container with `--network none`:
-// `zpkgm outdated` printed NOTHING and exited 0, with two packages installed
+// `zpkm outdated` printed NOTHING and exited 0, with two packages installed
 // and not one of them checked — every lookup had failed on DNS. The output
 // was indistinguishable from "you are up to date", which is the one thing it
 // had no evidence for.
@@ -568,7 +579,7 @@ func TestOutdatedOfAnEmptyStoreSaysSo(t *testing.T) {
 
 // stubFor writes the kind of file StubBins writes: a shell stub whose exec
 // line names the binary inside the package's store directory. That exec line
-// is the only durable record of what zpkgm linked and for whom.
+// is the only durable record of what zpkm linked and for whom.
 func stubFor(t *testing.T, binDir, storeDir, project, version, name string, siblings ...string) string {
 	t.Helper()
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -586,7 +597,7 @@ func stubFor(t *testing.T, binDir, storeDir, project, version, name string, sibl
 	// ⛔ LD_LIBRARY_PATH NAMES THE WHOLE CLOSURE, not just this package. The
 	// first version of this helper wrote LD_LIBRARY_PATH="/x" — a stub that
 	// diverged from a real one at precisely the point under test — and the
-	// test passed while `zpkgm uninstall jq` removed oniguruma's program in a
+	// test passed while `zpkm uninstall jq` removed oniguruma's program in a
 	// container. siblings are the other store paths a real stub would carry.
 	libs := []string{filepath.Join(pkgDir, "lib")}
 	libs = append(libs, siblings...)
@@ -715,7 +726,7 @@ func captureStdout(t *testing.T, fn func()) string {
 // artifact.StubBins, through the fake pantry, rather than by hand.
 //
 // Measured 2026-10-08 in a FROM-scratch container:
-// `zpkgm uninstall stedolan.github.io/jq` also removed /opt/bin/onig-config —
+// `zpkm uninstall stedolan.github.io/jq` also removed /opt/bin/onig-config —
 // oniguruma's program. A stub exports LD_LIBRARY_PATH holding EVERY library
 // directory in the closure, so a substring search over the whole file matches
 // every sibling of the same install. The hand-written fixture wrote
@@ -737,7 +748,7 @@ func TestUninstallLeavesTheClosureSiblingsAlone(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("ZPKG_DIR", store)
 	prefix := filepath.Join(home, ".local")
-	t.Setenv("ZPKGM_PREFIX", prefix)
+	t.Setenv("ZPKM_PREFIX", prefix)
 	t.Setenv("PATH", filepath.Join(prefix, "bin"))
 
 	// ONE install, so both stubs share the closure's LD_LIBRARY_PATH — which

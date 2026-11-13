@@ -1,7 +1,7 @@
-# zpkgm
+# zpkm
 
-[![CI](https://github.com/go-zpkg/zpkgm/actions/workflows/ci.yml/badge.svg)](https://github.com/go-zpkg/zpkgm/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/go-zpkg/zpkgm.svg)](https://pkg.go.dev/github.com/go-zpkg/zpkgm)
+[![CI](https://github.com/go-zpkg/zpkm/actions/workflows/ci.yml/badge.svg)](https://github.com/go-zpkg/zpkm/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-zpkg/zpkm.svg)](https://pkg.go.dev/github.com/go-zpkg/zpkm)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
 
 [Home](https://go-zpkg.github.io/) · [Docs](https://go-zpkg.github.io/docs/)
@@ -20,20 +20,20 @@ xz decoder).
 **Linux / macOS** — one line, naming the release you want:
 
 ```sh
-curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- zpkgm v0.10.0
+curl -fsSL https://go-zpkg.github.io/install.sh | sh -s -- zpkm v0.10.0
 ```
 
 **Windows** (PowerShell) — `irm | iex` passes no arguments, so the version goes
 in the environment:
 
 ```powershell
-$env:ZPKGM_VERSION='v0.10.0'; irm https://go-zpkg.github.io/install.ps1 | iex
+$env:ZPKM_VERSION='v0.10.0'; irm https://go-zpkg.github.io/install.ps1 | iex
 ```
 
 The installer downloads the static binary for your os/arch from that
-[release](https://github.com/go-zpkg/zpkgm/releases), verifies it against the
-release `SHA256SUMS`, and drops `zpkgm` on your `PATH` (`$HOME/.local/bin`, or
-`%LOCALAPPDATA%\Programs\go-zpkg` on Windows). Set `ZPKGM_INSTALL` to override
+[release](https://github.com/go-zpkg/zpkm/releases), verifies it against the
+release `SHA256SUMS`, and drops `zpkm` on your `PATH` (`$HOME/.local/bin`, or
+`%LOCALAPPDATA%\Programs\go-zpkg` on Windows). Set `ZPKM_INSTALL` to override
 the directory on Unix.
 
 ⛔ **`SHA256SUMS` is a checksum of itself.** It says the binaries match a
@@ -43,7 +43,7 @@ GitHub's **provenance attestation** — signed through Sigstore, saying that
 this repository's release workflow built that file from that commit:
 
 ```sh
-gh attestation verify -R go-zpkg/zpkgm zpkgm-linux-amd64
+gh attestation verify -R go-zpkg/zpkm zpkm-linux-amd64
 ```
 
 Every file of a release published after 2026-10-20 carries one; earlier ones
@@ -54,31 +54,31 @@ than failing closed, so a 404 on an older binary means *unattested*, not
 The version is named on purpose: this line copied today and the same line
 copied in six months install the same bytes, and a bad release does not reach
 everyone who happens to install that hour. To track releases instead, say so —
-`sh -s -- zpkgm latest`, or `ZPKGM_VERSION=latest`, which is also what a bare
+`sh -s -- zpkm latest`, or `ZPKM_VERSION=latest`, which is also what a bare
 `| sh` has always done. Re-running is the updater; it skips the download when
-the target version is already installed, and `ZPKGM_FORCE=1` reinstalls anyway.
+the target version is already installed, and `ZPKM_FORCE=1` reinstalls anyway.
 
 **Go users**:
 
 ```sh
-go install github.com/go-zpkg/zpkgm@latest
+go install github.com/go-zpkg/zpkm@latest
 ```
 
-Once installed, `zpkgm install lz4.org` verifies each artifact against the signed
+Once installed, `zpkm install lz4.org` verifies each artifact against the signed
 registry by default.
 
 ## Usage
 
 ```
-zpkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
-zpkgm uninstall|rm <pkg> ...             remove an installation (works offline)
-zpkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
-zpkgm list|ls                            list what's installed
-zpkgm outdated                           what has a newer version (exit 1 if any could not be checked)
-zpkgm update|up|upgrade                  update installations to latest
-zpkgm pin          <pkg>@version ...     install pinned to an exact version
-zpkgm run|x        <pkg> [-- args...]    run a pkg (works FROM scratch)
-zpkgm service      install|switch|rollback|list|remove   run a daemon under systemd, by version
+zpkm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
+zpkm uninstall|rm <pkg> ...             remove an installation (works offline)
+zpkm shim|stub    <pkg> ...             create a shim in <prefix>/bin
+zpkm list|ls                            list what's installed
+zpkm outdated                           what has a newer version (exit 1 if any could not be checked)
+zpkm update|up|upgrade                  update installations to latest
+zpkm pin          <pkg>@version ...     install pinned to an exact version
+zpkm run|x        <pkg> [-- args...]    run a pkg (works FROM scratch)
+zpkm service      install|switch|rollback|list|remove   run a daemon under systemd, by version
 
 flags: -h/--help  -v/--version  -p/--pin  -P/--prefix DIR  -s/--from-scratch
        -f/--file FILE   read packages from a file, one <pkg>[@version] per line
@@ -88,12 +88,12 @@ env:   ZPKG_DIR     artifact store (default: ~/.zpkg, or <prefix>/pkgs when the
                     boundary")
        ZPKG_DIST    artifact source (default: oci://ghcr.io/go-zpkg/packages, signed)
        ZPKG_VERIFY  verify artifact signatures, fail-closed (default: on)
-       ZPKGM_PREFIX  default install prefix (ideal for FROM scratch)
+       ZPKM_PREFIX  default install prefix (ideal for FROM scratch)
 ```
 
-By default `zpkgm install lz4.org` pulls from our signed OCI registry and
+By default `zpkm install lz4.org` pulls from our signed OCI registry and
 verifies each artifact's signature before installing — no env needed. The
-registry is `artifact.DistBase`, and `zpkgm --help` prints the one this binary is
+registry is `artifact.DistBase`, and `zpkm --help` prints the one this binary is
 built against; it is named in one place so it moves in one edit. Point
 `ZPKG_DIST` elsewhere if you have a mirror of your own.
 
@@ -104,7 +104,7 @@ otherwise.
 ### `install --lock`: the same install later, not a similar one
 
 ```console
-$ zpkgm install --lock seed.lock.hcl
+$ zpkm install --lock seed.lock.hcl
   installed acme.org/tool v1.0.0
   installed zlib.net v1.3.2
 linked 2 binaries → /usr/local/bin
@@ -147,8 +147,8 @@ It now prints its totals every time, including the zeros, names what it could
 not reach, and exits **1** if anything went unchecked:
 
 ```sh
-$ docker run --rm --network none -v store:/zpkg zpkgm-scratch outdated
-zpkgm: 1 of 1 installed packages could not be checked
+$ docker run --rm --network none -v store:/zpkg zpkm-scratch outdated
+zpkm: 1 of 1 installed packages could not be checked
 
 could NOT be asked about — these are not an all-clear:
   github.com/kkos/oniguruma: Get "https://ghcr.io/v2/…/tags/list": dial tcp:
@@ -165,13 +165,13 @@ printing a silence that reads as a clean bill of health.
 ### `uninstall` asks the machine, not the pantry
 
 It used to fetch the recipe to learn which binaries to unlink. That needs the
-**network** — measured, `zpkgm uninstall` failed on a DNS lookup inside a
+**network** — measured, `zpkm uninstall` failed on a DNS lookup inside a
 `--network none` container — and it is the wrong oracle besides: the recipe
 answers for what the package provides *today*, not for what we actually
 linked, so a `provides:` that changed since the install left stale stubs
 behind.
 
-What zpkgm linked is written down on the machine. Every stub ends in
+What zpkm linked is written down on the machine. Every stub ends in
 
 ```sh
 exec "<store>/<project>/v<version>/bin/<name>" "$@"
@@ -194,23 +194,23 @@ reading it:
   stubs with the real `StubBins`, and checks the fixture reproduces the hazard
   before concluding anything from its own success.
 
-### `zpkgm service`: a package's daemon, supervised and versioned
+### `zpkm service`: a package's daemon, supervised and versioned
 
 ```
-zpkgm service install  <pkg>[@version]   install it, write its unit and account, enable and start it
-zpkgm service switch   <pkg>@version     move the service to another version
-zpkgm service rollback <svc>             back to the version before the last switch (offline)
-zpkgm service list                       which version each service runs
-zpkgm service remove   <svc>             stop and disable every instance, delete the unit
+zpkm service install  <pkg>[@version]   install it, write its unit and account, enable and start it
+zpkm service switch   <pkg>@version     move the service to another version
+zpkm service rollback <svc>             back to the version before the last switch (offline)
+zpkm service list                       which version each service runs
+zpkm service remove   <svc>             stop and disable every instance, delete the unit
 ```
 
 A recipe that ships a daemon says how to run it in a `service "<name>" { … }`
 block (see [artifact](https://github.com/go-zpkg/artifact#a-recipe-can-declare-a-service)).
-zpkgm **renders** the systemd unit from that data. No unit file comes in the
+zpkm **renders** the systemd unit from that data. No unit file comes in the
 artifact. The hardening every service shares is written once, here, and the
 recipe states only what differs between daemons.
 
-**One template per service, and the instance is the version.** zpkgm writes
+**One template per service, and the instance is the version.** zpkm writes
 `/etc/systemd/system/<svc>@.service` with
 
 ```ini
@@ -223,7 +223,7 @@ about it: there is no `current` symlink, and no version is typed into a unit.
 State lives in versionless directories that systemd creates
 (`StateDirectory=`, `RuntimeDirectory=`, `ConfigurationDirectory=`).
 Nothing is written under the store, which stays immutable. The account is a
-static one, from `/etc/sysusers.d/zpkgm-<svc>.conf` applied with
+static one, from `/etc/sysusers.d/zpkm-<svc>.conf` applied with
 `systemd-sysusers`.
 
 The rendered units were checked against the hand-written reference units of
@@ -255,8 +255,8 @@ one version's library path the way a stub does.
 ## A shim is a privilege boundary
 
 ```console
-$ sudo zpkgm install go.dev@1.27.3
-zpkgm: refusing to record store paths under /usr/local/bin:
+$ sudo zpkm install go.dev@1.27.3
+zpkm: refusing to record store paths under /usr/local/bin:
   /Users/you/.zpkg is owned by uid 501, and /usr/local/bin belongs to uid 0 —
   uid 501 could replace what gets run with root's privileges.
   Use a store that uid 0 controls: ZPKG_DIR=/usr/local/pkgs
@@ -268,23 +268,23 @@ of whoever invokes it, so anyone who can write one of those paths can run
 code as that person.
 
 `ZPKG_DIR` defaults to `~/.zpkg`, and **macOS `sudo` keeps the caller's
-`HOME`** — so `sudo zpkgm install go.dev` used to write a root-owned
+`HOME`** — so `sudo zpkm install go.dev` used to write a root-owned
 `/usr/local/bin/go` pointing into an unprivileged user's home directory, and
 anything root ran through `go` after that executed a user-writable binary.
-That was [#73](https://github.com/go-zpkg/zpkgm/issues/73).
+That was [#73](https://github.com/go-zpkg/zpkm/issues/73).
 
 Two things changed, because either alone leaves a hole:
 
 - **The default follows the prefix.** With `ZPKG_DIR` unset, the store is
   `<prefix>/pkgs` whenever the prefix is not inside the home directory of the
-  user zpkgm is running as. A plain `zpkgm install` into `~/.local` goes on
+  user zpkm is running as. A plain `zpkm install` into `~/.local` goes on
   using `~/.zpkg`, so nothing moves for the ordinary case, and `ZPKG_DIR`
   still wins when you set it.
 - **The invariant is checked anyway.** `install`, `shim`, `update` and
   `service install` refuse when the store, any package prefix in it, any
   `LD_LIBRARY_PATH` directory, **or any directory above one of those** is
   owned by someone other than root or the prefix's owner, or is writable by
-  group or others. A default is not a boundary: `ZPKGM_PREFIX`, `--prefix` and
+  group or others. A default is not a boundary: `ZPKM_PREFIX`, `--prefix` and
   `ZPKG_DIR` combine into configurations nobody enumerated.
 
 Root is always allowed, because root can replace the shim itself. The
@@ -295,25 +295,25 @@ there would be a false positive on the commonest system prefix there is.
 The design this descends from does not have this hole, and not by checking for
 it: it runs the download as the pre-sudo user and then *mirrors* the result
 into `<prefix>/pkgs`, so the shim's target is inside the prefix by
-construction. zpkgm shims straight at the store instead, which is why the
+construction. zpkm shims straight at the store instead, which is why the
 store's location had to become the prefix's business.
 
 **Without systemd** (a container, a `FROM scratch` image), every command that
 changes something refuses in one sentence that names the reason:
 
 ```
-zpkgm: zpkgm service install needs systemd, and this system is not running it (/run/systemd/system does not exist): a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkgm run`
+zpkm: zpkm service install needs systemd, and this system is not running it (/run/systemd/system does not exist): a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkm run`
 ```
 
-`zpkgm service list` still answers from the disk.
+`zpkm service list` still answers from the disk.
 
 ### `uninstall` will not remove what a service runs
 
 ```
-$ zpkgm uninstall github.com/go-authn/bridge
-zpkgm: refusing to uninstall: a service runs it, and nothing was removed:
+$ zpkm uninstall github.com/go-authn/bridge
+zpkm: refusing to uninstall: a service runs it, and nothing was removed:
   authn-bridge@0.20.0.service (enabled, active) runs /opt/zpkg/github.com/go-authn/bridge/v0.20.0
-run "zpkgm service remove authn-bridge" first
+run "zpkm service remove authn-bridge" first
 ```
 
 A refused uninstall changes nothing, stubs included, and it checks every
@@ -366,17 +366,17 @@ binary runs even on an image with no system libc. Packages that ship a
 
 ```dockerfile
 FROM scratch
-COPY zpkgm /zpkgm
+COPY zpkm /zpkm
 ENV ZPKG_DIR=/zpkg
-ENTRYPOINT ["/zpkgm"]
+ENTRYPOINT ["/zpkm"]
 ```
 
 ```sh
-$ docker run --rm zpkgm-scratch run gnu.org/bash -- --version
+$ docker run --rm zpkm-scratch run gnu.org/bash -- --version
 GNU bash, version 5.3.0(1)-release (aarch64-unknown-linux-gnu)
 ```
 
-A `FROM scratch` image whose only file is the `zpkgm` binary can install **and
+A `FROM scratch` image whose only file is the `zpkm` binary can install **and
 run** real packages, with no system libc.
 
 ### automatic closure completion
@@ -395,40 +395,40 @@ the gap automatically:
 So a C++ package works with no per-recipe changes:
 
 ```sh
-$ docker run --rm zpkgm-scratch run nodejs.org -- --version   # pulls glibc + libstdcxx
+$ docker run --rm zpkm-scratch run nodejs.org -- --version   # pulls glibc + libstdcxx
 v22.x.x
 ```
 
 ### root without sudo
 
 A scratch container runs as **root**, has **no `sudo`**, and often no `$HOME`.
-The reference zpkgm's `root → /usr/local`, `user → ~/.local`, "elevate with
-sudo" model does not fit. zpkgm treats root as a first-class install mode (no
+The reference zpkm's `root → /usr/local`, `user → ~/.local`, "elevate with
+sudo" model does not fit. zpkm treats root as a first-class install mode (no
 "use sudo" nagging) and lets you pin the prefix explicitly — ideal in a
 Dockerfile:
 
 ```dockerfile
 FROM scratch
-COPY zpkgm /zpkgm
+COPY zpkm /zpkm
 ENV ZPKG_DIR=/zpkg
-ENV ZPKGM_PREFIX=/usr     # bins land in /usr/bin; no sudo, no HOME needed
-ENTRYPOINT ["/zpkgm"]
+ENV ZPKM_PREFIX=/usr     # bins land in /usr/bin; no sudo, no HOME needed
+ENTRYPOINT ["/zpkm"]
 ```
 
 ```sh
-$ docker run --rm -e ZPKGM_PREFIX=/usr zpkgm-scratch install gnu.org/bash
+$ docker run --rm -e ZPKM_PREFIX=/usr zpkm-scratch install gnu.org/bash
   installed gnu.org/bash v5.3.0
 linked 2 binaries → /usr/bin
 ```
 
-Prefix precedence: `--prefix`/`-P` flag → `ZPKGM_PREFIX` → root ? `/usr/local` :
+Prefix precedence: `--prefix`/`-P` flag → `ZPKM_PREFIX` → root ? `/usr/local` :
 `~/.local` (falling back to `/usr/local` when there is no usable `$HOME`).
 
 ### wrapper scripts
 
 Some packaged tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
 that set up env and exec the real ELF. On `FROM scratch` there is no shell — so
-zpkgm, being a package manager, **installs the packaged `gnu.org/bash` +
+zpkm, being a package manager, **installs the packaged `gnu.org/bash` +
 `gnu.org/coreutils`** and points `/bin/sh` at that real bash (and puts coreutils
 like `dirname` on `PATH`). It also symlinks the glibc artifact's own loader to
 `/lib/ld-linux` (best-effort; a no-op on a normal system) so every artifact ELF —
@@ -439,7 +439,7 @@ the `set -e` semantics they rely on. That is how `git` runs on scratch.
 ### a package with no command
 
 Not every package is a program. A recipe with an empty `provides:` ships
-headers and a `.so`, and the binary name zpkgm would run is a **guess** — the
+headers and a `.so`, and the binary name zpkm would run is a **guess** — the
 project's leaf name, which is the right answer often enough to keep, and no
 answer at all for a library.
 
@@ -447,8 +447,8 @@ answer at all for a library.
 you never asked about:
 
 ```sh
-$ zpkgm run zlib.net -- --version
-zpkgm: zlib.net provides no command: it is a library, not a program — `zpkgm install zlib.net` installs its files, but there is nothing to run
+$ zpkm run zlib.net -- --version
+zpkm: zlib.net provides no command: it is a library, not a program — `zpkm install zlib.net` installs its files, but there is nothing to run
 ```
 
 A **declared** command that is missing is a different fault — the package, or
@@ -464,7 +464,7 @@ need in order to go and look.
    `versions.txt` entry satisfying each constraint (`*`, `^`, `~`, `>=`, `=`).
 2. **download** — fetch `<project>/<os>/<arch>/v<ver>.tar.{gz,xz}` from the
    artifact source (default: our signed OCI registry, verifying each artifact's
-   signature — `zpkgm --help` prints which one, and `ZPKG_DIST` overrides it).
+   signature — `zpkm --help` prints which one, and `ZPKG_DIST` overrides it).
 3. **extract** — stream straight through gzip/xz + tar into `ZPKG_DIR`.
 4. **link** — write env-setting stubs (or run through the loader) so the tools
    find their sibling artifacts' libraries.
@@ -497,4 +497,4 @@ pkgx maintainers to publish complete runtime closures.
 
 ## License
 
-BSD-3-Clause © the go-zpkg/zpkgm authors.
+BSD-3-Clause © the go-zpkg/zpkm authors.

@@ -1,6 +1,6 @@
 # pkgm-service project=github.com/go-authn/authnd store=/opt/zpkg
 #
-# The account authnd@.service runs as, written by `zpkgm service install`.
+# The account authnd@.service runs as, written by `zpkm service install`.
 # A static account, not DynamicUser=: its files must keep one owner across
 # versions, reinstalls and restores.
 #

@@ -1,4 +1,4 @@
-// Command zpkgm is a dependency-free, pure-Go package installer.
+// Command zpkm is a dependency-free, pure-Go package installer.
 //
 // It resolves a package's runtime dependency closure from the pantry,
 // downloads the artifacts — from our signed OCI registry (artifact.DistBase) by
@@ -33,29 +33,29 @@ import (
 // testable without contriving an unreadable file.
 var osReadFile = os.ReadFile
 
-// version is reported by `zpkgm --version`. It defaults to "dev" and is
+// version is reported by `zpkm --version`. It defaults to "dev" and is
 // overridden at release-build time via -ldflags "-X main.version=<tag>".
 var version = "dev"
 
-var usage = `zpkgm ` + version + ` — pure-Go package installer
+var usage = `zpkm ` + version + ` — pure-Go package installer
 
 usage:
-  zpkgm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
+  zpkm install|i    <pkg>[@version] ...   install to /usr/local (root) or ~/.local
                     -f <file>             ... or read the list from a file
-  zpkgm uninstall|rm <pkg> ...             remove an installation (works offline)
-  zpkgm shim|stub    <pkg> ...             create a shim in <prefix>/bin
-  zpkgm list|ls                            list what's installed
-  zpkgm outdated                           what has a newer version (exit 1 if any could not be checked)
-  zpkgm update|up|upgrade                  update installations to latest
-  zpkgm pin          <pkg>@version ...     install pinned to an exact version
-  zpkgm run|x        <pkg> [-- args...]    run a pkg (shell-free; works FROM scratch)
-  zpkgm image        <pkg>                 emit a FROM-scratch Containerfile that
-                                          installs <pkg> with zpkgm, in the image
-  zpkgm service install  <pkg>[@version]  run <pkg> as a systemd service, that version
-  zpkgm service switch   <pkg>@version   move the service to another version
-  zpkgm service rollback <svc>            return to the version before the last switch
-  zpkgm service list                      which version each service runs
-  zpkgm service remove   <svc>            stop and disable it, delete its unit
+  zpkm uninstall|rm <pkg> ...             remove an installation (works offline)
+  zpkm shim|stub    <pkg> ...             create a shim in <prefix>/bin
+  zpkm list|ls                            list what's installed
+  zpkm outdated                           what has a newer version (exit 1 if any could not be checked)
+  zpkm update|up|upgrade                  update installations to latest
+  zpkm pin          <pkg>@version ...     install pinned to an exact version
+  zpkm run|x        <pkg> [-- args...]    run a pkg (shell-free; works FROM scratch)
+  zpkm image        <pkg>                 emit a FROM-scratch Containerfile that
+                                          installs <pkg> with zpkm, in the image
+  zpkm service install  <pkg>[@version]  run <pkg> as a systemd service, that version
+  zpkm service switch   <pkg>@version   move the service to another version
+  zpkm service rollback <svc>            return to the version before the last switch
+  zpkm service list                      which version each service runs
+  zpkm service remove   <svc>            stop and disable it, delete its unit
 
 flags:
   -h, --help        show this help
@@ -82,8 +82,8 @@ env:
                     unsigned upstream pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY       verify artifact signatures, fail-closed (default: on;
                     set 0/false/no/off to disable)
-  ZPKGM_PREFIX      default install prefix (ideal for FROM scratch: be root,
-                    set ZPKGM_PREFIX=/usr, no sudo needed)
+  ZPKM_PREFIX      default install prefix (ideal for FROM scratch: be root,
+                    set ZPKM_PREFIX=/usr, no sudo needed)
 
   The names PKGM_PREFIX, PKGX_DIR, PKGX_DIST and PKGX_VERIFY are RETIRED and
   not read as aliases. Setting one is refused, naming its replacement, rather
@@ -103,7 +103,7 @@ type flags struct {
 }
 
 // parseArgs splits flags from positional arguments (getopt-style, matching the
-// reference zpkgm's -h/-v/-p aliases) and captures the value-taking
+// reference zpkm's -h/-v/-p aliases) and captures the value-taking
 // --prefix/-P <dir> (also accepts --prefix=<dir>).
 func parseArgs(argv []string) ([]string, flags) {
 	var f flags
@@ -166,9 +166,9 @@ func run(argv []string) int {
 	// A closure the resolver could not complete is not an error here — it is an
 	// error MUCH later, when the installed program starts and reports "cannot
 	// open shared object file". Print those diagnostics; artifact stays silent by
-	// default. It matters most for `zpkgm image`, whose FROM-scratch output has
+	// default. It matters most for `zpkm image`, whose FROM-scratch output has
 	// no host library to paper over the gap.
-	artifact.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkgm: "+msg) }
+	artifact.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkm: "+msg) }
 	// ⛔ BEFORE ANYTHING ELSE, because the thing a retired variable would have
 	// changed is where files land, and that is decided below this line.
 	if msg := refuseObsoleteEnv(os.Getenv); msg != "" {
@@ -176,7 +176,7 @@ func run(argv []string) int {
 		return 2
 	}
 	if err := configError(); err != nil {
-		fmt.Fprintln(os.Stderr, "zpkgm: warning: ignoring ~/.zpkg/config.hcl2: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkm: warning: ignoring ~/.zpkg/config.hcl2: "+err.Error())
 	}
 	pos, f := parseArgs(argv)
 	if f.help || (len(pos) > 0 && pos[0] == "help") {
@@ -184,12 +184,12 @@ func run(argv []string) int {
 		return 0
 	}
 	if f.showVersion {
-		// ⛔ THE BINARY SAYS ITS OWN NAME. After the rename, `zpkgm` is not
+		// ⛔ THE BINARY SAYS ITS OWN NAME. After the rename, `zpkm` is not
 		// merely the wrong name — upstream's installer is a different program
 		// that can now sit on the same PATH, which is the point of renaming
-		// ours. Measured on this machine: `zpkgm --version` answered
-		// `zpkgm dev`.
-		fmt.Println("zpkgm " + version)
+		// ours. Measured on this machine: `zpkm --version` answered
+		// `zpkm dev`.
+		fmt.Println("zpkm " + version)
 		return 0
 	}
 	if len(pos) == 0 {
@@ -197,7 +197,7 @@ func run(argv []string) int {
 		return 2
 	}
 	if err := dispatch(pos[0], pos[1:], f); err != nil {
-		fmt.Fprintln(os.Stderr, "zpkgm: "+err.Error())
+		fmt.Fprintln(os.Stderr, "zpkm: "+err.Error())
 		return 1
 	}
 	return 0
@@ -237,8 +237,8 @@ func dispatch(cmd string, args []string, f flags) error {
 // --prefix flag, then the prefix environment variable (both ideal for a
 // `FROM scratch` image where you are root, there is no sudo, and $HOME is
 // unset). Otherwise /usr/local as root, else ~/.local. Being root is a
-// fully-supported first-class mode here — zpkgm never nags to use sudo.
-// prefixFromEnv reads the install prefix. One spelling, ZPKGM_PREFIX.
+// fully-supported first-class mode here — zpkm never nags to use sudo.
+// prefixFromEnv reads the install prefix. One spelling, ZPKM_PREFIX.
 //
 // ⛔⛔ THE OLD NAME IS NOT AN ALIAS, AND IT IS NOT SILENTLY IGNORED EITHER.
 // This used to read PKGM_PREFIX as a fallback, and the argument for it was a
@@ -251,7 +251,7 @@ func dispatch(cmd string, args []string, f flags) error {
 // [refuseObsoleteEnv] REFUSES when it is set instead of acting on it. Nothing
 // is honoured twice and nothing changes under anybody quietly; a reader who set
 // the old name is told the new one and the command stops.
-func prefixFromEnv() string { return os.Getenv("ZPKGM_PREFIX") }
+func prefixFromEnv() string { return os.Getenv("ZPKM_PREFIX") }
 
 // obsoleteEnv maps a retired variable to the one that replaced it.
 //
@@ -259,11 +259,22 @@ func prefixFromEnv() string { return os.Getenv("ZPKGM_PREFIX") }
 // published name; a user who set one gets told, once, what to set instead. They
 // are listed rather than pattern-matched so that retiring a name is a visible
 // edit to this table and not a consequence of a rule.
+// ⛔⛔ A RENAME ADDS A ROW HERE. IT DOES NOT ONLY CHANGE ONE. The `zpkgm` ->
+// `zpkm` pass rewrote the VALUE beside PKGM_PREFIX, because that value is the
+// current name and the current name moved. What it could not do is notice that
+// ZPKGM_PREFIX had thereby become retired — and ZPKGM_PREFIX is what every
+// profile, Dockerfile and CI job written against a released zpkgm says. A
+// sweep updates what a table POINTS AT; only a person adds what the table must
+// now REFUSE. Without this row the command would read ZPKM_PREFIX, find
+// nothing, and fall back to /usr/local-as-root-else-~/.local — installing
+// somewhere nobody asked for, silently, which is the exact hazard the comment
+// above says this mechanism exists to prevent.
 var obsoleteEnv = map[string]string{
-	"PKGM_PREFIX": "ZPKGM_PREFIX",
-	"PKGX_DIR":    "ZPKG_DIR",
-	"PKGX_DIST":   "ZPKG_DIST",
-	"PKGX_VERIFY": "ZPKG_VERIFY",
+	"ZPKGM_PREFIX": "ZPKM_PREFIX",
+	"PKGM_PREFIX":  "ZPKM_PREFIX",
+	"PKGX_DIR":     "ZPKG_DIR",
+	"PKGX_DIST":    "ZPKG_DIST",
+	"PKGX_VERIFY":  "ZPKG_VERIFY",
 }
 
 // refuseObsoleteEnv reports every retired variable that is set, in a message
@@ -280,7 +291,7 @@ func refuseObsoleteEnv(look func(string) string) string {
 	}
 	sort.Strings(retired)
 	var b strings.Builder
-	b.WriteString("zpkgm: refusing to run: these variables were renamed and are no longer read:\n")
+	b.WriteString("zpkm: refusing to run: these variables were renamed and are no longer read:\n")
 	for _, old := range retired {
 		fmt.Fprintf(&b, "  %s is now %s\n", old, obsoleteEnv[old])
 	}
@@ -378,7 +389,7 @@ func cmdInstall(args []string, prefix string, f flags) error {
 		// shell, /bin/sh. A FROM-scratch image has neither, and anything that
 		// shells out dies without them — `make` runs every recipe line through
 		// /bin/sh, so a build inside such an image fails on the first one with
-		// "make: /bin/sh: No such file or directory". `zpkgm run` already does
+		// "make: /bin/sh: No such file or directory". `zpkm run` already does
 		// this at run time; an image built with -s needs it baked in.
 		if artifact.GOOS() == "linux" {
 			if loader := artifact.FindLoader(dir); loader != "" {
@@ -432,7 +443,7 @@ func cmdShim(args []string, prefix string) error {
 //
 // ⛔ IT USED TO ASK THE PANTRY WHAT TO DELETE, WHICH IS THE WRONG ORACLE AND
 // NEEDS THE NETWORK. Measured 2026-10-08 in a FROM-scratch container with
-// `--network none`: `zpkgm uninstall gnu.org/bash` failed outright on a DNS
+// `--network none`: `zpkm uninstall gnu.org/bash` failed outright on a DNS
 // lookup. You could not uninstall offline — and on a host whose pantry has
 // moved on, the names it fetched were the names the recipe provides TODAY,
 // not the ones we actually linked, so a `provides:` that changed since the
@@ -536,7 +547,7 @@ func removeStubsInto(binDir, storeDir, project string) ([]string, error) {
 // LD_LIBRARY_PATH holding EVERY library directory in the closure, so a
 // substring search over the whole file matches every sibling in the same
 // install. Measured 2026-10-08 in a FROM-scratch container:
-// `zpkgm uninstall stedolan.github.io/jq` removed /opt/bin/onig-config too —
+// `zpkm uninstall stedolan.github.io/jq` removed /opt/bin/onig-config too —
 // oniguruma's program, matched on jq's lib path inside its environment line.
 //
 // The unit test did not see it: its fixture wrote LD_LIBRARY_PATH="/x",

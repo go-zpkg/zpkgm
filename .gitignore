@@ -5,8 +5,20 @@
 # (blob e2ec8ed, 14 204 658 bytes). A rename is not finished when the code
 # compiles: every file that names the old thing by spelling rather than by
 # meaning stops working silently, and an ignore rule is the quietest of them.
+#
+# ⛔⛔ SO EVERY SPELLING STAYS, AND THE RENAME TO `zpkm` ADDS ONE RATHER THAN
+# REPLACING ONE. The same thing happened a second time in this organisation on
+# 2026-11-13 (go-zpkg/packages#449 listed only the CURRENT names while the
+# committed files carried the old ones, and 29 MB stayed in HEAD while the
+# pull request said they were gone). An ignore rule written from the name a
+# thing SHOULD have cannot see the name it HAS — and after a rename a working
+# tree holds BOTH, because the previous build is still sitting there.
+/zpkm
+/zpkm.*
 /zpkgm
 /zpkgm.*
+/pkgm
+/pkgm.*
 *.out
 bsd.test
 bsd-tests.list
