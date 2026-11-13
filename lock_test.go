@@ -35,7 +35,7 @@ func publishedLock(pins ...artifact.LockPin) artifact.Lock {
 		Version:   1,
 		Platform:  hostPlatform(),
 		Generated: "2026-11-03T06:00:00Z",
-		ZBK:       "v0.49.0",
+		ZPKB:      "v0.49.0",
 		Pinned:    artifact.PinsPublished,
 		Roots:     []string{"acme.org/tool"},
 		Pins:      pins,
