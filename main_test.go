@@ -13,12 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // --- CLI-level fake pkgx server ---------------------------------------------
 // A compact in-memory dist.pkgx.dev + pantry for exercising the CLI dispatch
-// end-to-end. It points bottle.DistBase / bottle.PantryBase at itself.
+// end-to-end. It points artifact.DistBase / artifact.PantryBase at itself.
 
 type fakePkg struct {
 	versions []string
@@ -28,7 +28,7 @@ type fakePkg struct {
 
 func fakeServer(t *testing.T, pkgs map[string]fakePkg) func() {
 	t.Helper()
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -59,21 +59,21 @@ func fakeServer(t *testing.T, pkgs map[string]fakePkg) func() {
 			rest := strings.TrimPrefix(p, pfx)
 			if strings.HasSuffix(rest, ".tar.gz") {
 				ver := strings.TrimSuffix(rest, ".tar.gz")
-				w.Write(makeBottleGz(t, proj, ver, pk.files))
+				w.Write(makeArtifactGz(t, proj, ver, pk.files))
 				return
 			}
 		}
 		http.NotFound(w, r)
 	})
-	// The fixture is a static-HTTP dist serving UNSIGNED bottles: the fail-closed
+	// The fixture is a static-HTTP dist serving UNSIGNED artifacts: the fail-closed
 	// check (which the install path now enforces too) would refuse every one of
 	// them, so this fixture states the posture it always assumed.
 	t.Setenv("ZPKG_VERIFY", "0")
-	bottle.DistBase, bottle.PantryBase = srv.URL, srv.URL
+	artifact.DistBase, artifact.PantryBase = srv.URL, srv.URL
 	return srv.Close
 }
 
-func makeBottleGz(t *testing.T, project, ver string, files map[string]string) []byte {
+func makeArtifactGz(t *testing.T, project, ver string, files map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -296,7 +296,10 @@ func TestCommandsE2E(t *testing.T) {
 	}
 	// It is not enough that it returned nil: the point of the command is what
 	// it PRINTS, and this call used to be asserted on its error alone.
-	if !strings.Contains(out.String(), "acme.org/tool 1.0.0 → 2.0.0") {
+	// The installed version is reported with its variant hash, because that is
+	// what is installed; the hash is not reproducible between runs, so the
+	// assertion compares the words without it.
+	if !strings.Contains(hashlessText(out.String()), "acme.org/tool 1.0.0 → 2.0.0") {
 		t.Errorf("the outdated package is not reported:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "1 installed, 1 checked, 1 behind, 0 could not be asked") {
@@ -357,12 +360,12 @@ func TestRunExec(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ZPKG_DIR", dir)
 	var gotArgv []string
-	old := bottle.Exec
-	bottle.Exec = func(argv0 string, argv []string, env []string) error {
+	old := artifact.Exec
+	artifact.Exec = func(argv0 string, argv []string, env []string) error {
 		gotArgv = argv
 		return nil
 	}
-	defer func() { bottle.Exec = old }()
+	defer func() { artifact.Exec = old }()
 	if err := cmdRun([]string{"acme.org/tool", "--", "--flag"}); err != nil {
 		t.Fatal(err)
 	}
@@ -571,14 +574,21 @@ func stubFor(t *testing.T, binDir, storeDir, project, version, name string, sibl
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	real := filepath.Join(storeDir, project, "v"+version, "bin", name)
+	// ⛔ THE FIXTURE ASKS FOR THE PREFIX THE REAL CODE WOULD USE. Composing
+	// "v"+version here would have the helper write a shape StubBins no longer
+	// writes — a fixture that diverges from the thing under test is the
+	// failure this helper's own comment below records, in another spelling.
+	// With nothing installed StorePrefix falls back to the composed path, so
+	// this is identical today and stays correct when a test does install.
+	pkgDir := artifact.StorePrefix(storeDir, project, artifact.ParseVer(version))
+	real := filepath.Join(pkgDir, "bin", name)
 	p := filepath.Join(binDir, name)
 	// ⛔ LD_LIBRARY_PATH NAMES THE WHOLE CLOSURE, not just this package. The
 	// first version of this helper wrote LD_LIBRARY_PATH="/x" — a stub that
 	// diverged from a real one at precisely the point under test — and the
 	// test passed while `zpkgm uninstall jq` removed oniguruma's program in a
 	// container. siblings are the other store paths a real stub would carry.
-	libs := []string{filepath.Join(storeDir, project, "v"+version, "lib")}
+	libs := []string{filepath.Join(pkgDir, "lib")}
 	libs = append(libs, siblings...)
 	body := "#!/bin/sh\nexport LD_LIBRARY_PATH=\"" + strings.Join(libs, ":") + "${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\nexec \"" + real + "\" \"$@\"\n"
 	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
@@ -590,7 +600,7 @@ func stubFor(t *testing.T, binDir, storeDir, project, version, name string, sibl
 // ⛔ THE SEPARATOR IS THE RULE, as in every prefix match. Without the version
 // segment in the marker, uninstalling gnu.org/gcc also unlinks
 // gnu.org/gcc/libstdcxx — a different package whose store path merely starts
-// the same way, and one that half the C++ bottles depend on.
+// the same way, and one that half the C++ artifacts depend on.
 func TestUninstallDoesNotTakeASubprojectWithIt(t *testing.T) {
 	store, prefix := t.TempDir(), t.TempDir()
 	binDir := filepath.Join(prefix, "bin")
@@ -632,9 +642,9 @@ func TestUninstallDoesNotTakeASubprojectWithIt(t *testing.T) {
 func TestUninstallWorksWithNoNetworkAtAll(t *testing.T) {
 	store, prefix := t.TempDir(), t.TempDir()
 	// A port nothing listens on: any fetch fails at once, loudly.
-	oldDist, oldPantry := bottle.DistBase, bottle.PantryBase
-	bottle.DistBase, bottle.PantryBase = "http://127.0.0.1:1", "http://127.0.0.1:1"
-	defer func() { bottle.DistBase, bottle.PantryBase = oldDist, oldPantry }()
+	oldDist, oldPantry := artifact.DistBase, artifact.PantryBase
+	artifact.DistBase, artifact.PantryBase = "http://127.0.0.1:1", "http://127.0.0.1:1"
+	defer func() { artifact.DistBase, artifact.PantryBase = oldDist, oldPantry }()
 	t.Setenv("ZPKG_DIR", store)
 
 	stub := stubFor(t, filepath.Join(prefix, "bin"), store, "acme.org/tool", "1.0.0", "tool")
@@ -702,7 +712,7 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 // ⛔⛔ THE FIXTURE THAT CANNOT DIVERGE: these stubs are written by the REAL
-// bottle.StubBins, through the fake pantry, rather than by hand.
+// artifact.StubBins, through the fake pantry, rather than by hand.
 //
 // Measured 2026-10-08 in a FROM-scratch container:
 // `zpkgm uninstall stedolan.github.io/jq` also removed /opt/bin/onig-config —

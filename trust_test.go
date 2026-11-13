@@ -7,17 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // resolved builds the one-package closure these tests shim.
-func resolved(t *testing.T, project, version string) []bottle.Resolved {
+func resolved(t *testing.T, project, version string) []artifact.Resolved {
 	t.Helper()
-	return []bottle.Resolved{{Project: project, Version: bottle.ParseVer(version)}}
+	return []artifact.Resolved{{Project: project, Version: artifact.ParseVer(version)}}
 }
 
 // ⛔ TestRootStoreDoesNotFollowTheCallersHome is go-zpkg/zpkgm#73's first half.
-// macOS `sudo` keeps the caller's HOME, so ~/.pkgx resolved to an
+// macOS `sudo` keeps the caller's HOME, so ~/.zpkg resolved to an
 // unprivileged user's home and root's shim pointed into it.
 func TestRootStoreDoesNotFollowTheCallersHome(t *testing.T) {
 	home := t.TempDir()
@@ -33,14 +33,14 @@ func TestRootStoreDoesNotFollowTheCallersHome(t *testing.T) {
 }
 
 // TestAHomePrefixKeepsTheHomeStore: the ordinary case must not move. A plain
-// `zpkgm install` into ~/.local goes on using ~/.pkgx, or every existing
+// `zpkgm install` into ~/.local goes on using ~/.zpkg, or every existing
 // install on every developer machine is suddenly in the wrong place.
 func TestAHomePrefixKeepsTheHomeStore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("ZPKG_DIR", "")
 
-	want := filepath.Join(home, ".pkgx")
+	want := filepath.Join(home, ".zpkg")
 	if got := storeFor(filepath.Join(home, ".local")); got != want {
 		t.Errorf("storeFor(~/.local) = %q, want %q", got, want)
 	}
@@ -51,10 +51,10 @@ func TestAHomePrefixKeepsTheHomeStore(t *testing.T) {
 // the documented workaround for the very bug it fixes.
 func TestPKGXDIRStillWins(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("ZPKG_DIR", "/opt/pkgx")
+	t.Setenv("ZPKG_DIR", "/opt/zpkg")
 
-	if got := storeFor("/usr/local"); got != "/opt/pkgx" {
-		t.Errorf("storeFor with ZPKG_DIR set = %q, want /opt/pkgx", got)
+	if got := storeFor("/usr/local"); got != "/opt/zpkg" {
+		t.Errorf("storeFor with ZPKG_DIR set = %q, want /opt/zpkg", got)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestAPrefixNamedAlongsideHomeIsNotInsideIt(t *testing.T) {
 // described rather than created: planting a file owned by another user needs
 // root, and a test that needs root is a test that does not run.
 func TestAForeignOwnedStoreIsRefused(t *testing.T) {
-	store := "/Users/someone/.pkgx"
+	store := "/Users/someone/.zpkg"
 	foreign := filepath.Join(store, "go.dev", "v1.27.3")
 
 	withOwners(t, func(path string) (uint32, fs.FileMode, error) {
@@ -109,7 +109,7 @@ func TestAUserOwnedStoreIsFineForThatUser(t *testing.T) {
 	withOwners(t, func(string) (uint32, fs.FileMode, error) {
 		return 501, 0o755 | fs.ModeDir, nil
 	})
-	if err := trustShimTargets("/Users/someone/.local", "/Users/someone/.pkgx",
+	if err := trustShimTargets("/Users/someone/.local", "/Users/someone/.zpkg",
 		resolved(t, "go.dev", "1.27.3")); err != nil {
 		t.Errorf("a user's own prefix and store were refused: %v", err)
 	}

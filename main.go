@@ -1,7 +1,7 @@
 // Command zpkgm is a dependency-free, pure-Go package installer.
 //
 // It resolves a package's runtime dependency closure from the pantry,
-// downloads the bottles — from our signed OCI registry (bottle.DistBase) by
+// downloads the artifacts — from our signed OCI registry (artifact.DistBase) by
 // default, verifying each signature, fail-closed — and installs them, with no
 // runtime dependencies of its own: a single CGO_ENABLED=0 binary that runs on
 // a `FROM scratch` image. ZPKG_DIST points it at another dist, e.g. a mirror
@@ -26,7 +26,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // osReadFile is os.ReadFile, a seam so the package-list reader's error branch is
@@ -76,11 +76,11 @@ flags:
                     cannot be combined with named packages, -f, -p or -s.
 
 env:
-  ZPKG_DIR          bottle store (default: ~/.zpkg)
-  ZPKG_DIST         bottle source (default: oci://ghcr.io/go-zpkg/packages, the
+  ZPKG_DIR          artifact store (default: ~/.zpkg)
+  ZPKG_DIST         artifact source (default: oci://ghcr.io/go-zpkg/packages, the
                     signed registry; set https://dist.pkgx.dev for the full
                     unsigned upstream pantry — pair with ZPKG_VERIFY=0)
-  ZPKG_VERIFY       verify bottle signatures, fail-closed (default: on;
+  ZPKG_VERIFY       verify artifact signatures, fail-closed (default: on;
                     set 0/false/no/off to disable)
   ZPKGM_PREFIX      default install prefix (ideal for FROM scratch: be root,
                     set ZPKGM_PREFIX=/usr, no sudo needed)
@@ -159,16 +159,16 @@ func main() { os.Exit(run(os.Args[1:])) }
 
 // configError reports a load/parse failure of ~/.zpkg/config.hcl2, if any. It
 // is a var so tests can drive the startup-warning path.
-var configError = bottle.ConfigError
+var configError = artifact.ConfigError
 
 // run is the testable entry point; it returns the process exit code.
 func run(argv []string) int {
 	// A closure the resolver could not complete is not an error here — it is an
 	// error MUCH later, when the installed program starts and reports "cannot
-	// open shared object file". Print those diagnostics; bottle stays silent by
+	// open shared object file". Print those diagnostics; artifact stays silent by
 	// default. It matters most for `zpkgm image`, whose FROM-scratch output has
 	// no host library to paper over the gap.
-	bottle.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkgm: "+msg) }
+	artifact.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "zpkgm: "+msg) }
 	// ⛔ BEFORE ANYTHING ELSE, because the thing a retired variable would have
 	// changed is where files land, and that is decided below this line.
 	if msg := refuseObsoleteEnv(os.Getenv); msg != "" {
@@ -344,11 +344,11 @@ func cmdInstall(args []string, prefix string, f flags) error {
 		roots[p] = c
 	}
 	dir := storeFor(prefix)
-	var closure []bottle.Resolved
+	var closure []artifact.Resolved
 	if f.scratch {
 		// Materialize the complete FROM-scratch closure (declared deps + the
 		// implicit glibc/libgcc_s/libstdc++/libatomic system libraries).
-		closure, err = bottle.CompleteClosure(roots, dir)
+		closure, err = artifact.CompleteClosure(roots, dir)
 		if err != nil {
 			return err
 		}
@@ -356,12 +356,12 @@ func cmdInstall(args []string, prefix string, f flags) error {
 			fmt.Printf("  closure   %s v%s\n", r.Project, r.Version.Raw)
 		}
 	} else {
-		closure, err = bottle.ResolveClosure(roots)
+		closure, err = artifact.ResolveClosure(roots)
 		if err != nil {
 			return err
 		}
 		for _, r := range closure {
-			fresh, err := bottle.Install(r, dir)
+			fresh, err := artifact.Install(r, dir)
 			if err != nil {
 				return fmt.Errorf("%s: %w", r.Project, err)
 			}
@@ -380,16 +380,16 @@ func cmdInstall(args []string, prefix string, f flags) error {
 		// /bin/sh, so a build inside such an image fails on the first one with
 		// "make: /bin/sh: No such file or directory". `zpkgm run` already does
 		// this at run time; an image built with -s needs it baked in.
-		if bottle.GOOS() == "linux" {
-			if loader := bottle.FindLoader(dir); loader != "" {
-				bottle.SetupScratchRootfs(loader, bottle.FindClosureBin(closure, dir, "gnu.org/bash", "bash"))
+		if artifact.GOOS() == "linux" {
+			if loader := artifact.FindLoader(dir); loader != "" {
+				artifact.SetupScratchRootfs(loader, artifact.FindClosureBin(closure, dir, "gnu.org/bash", "bash"))
 			}
 		}
 	}
 	if err := trustShimTargets(prefix, dir, closure); err != nil {
 		return err
 	}
-	n, err := bottle.StubBins(closure, dir, prefix)
+	n, err := artifact.StubBins(closure, dir, prefix)
 	if err != nil {
 		return err
 	}
@@ -408,19 +408,19 @@ func cmdShim(args []string, prefix string) error {
 		roots[p] = c
 	}
 	dir := storeFor(prefix)
-	closure, err := bottle.ResolveClosure(roots)
+	closure, err := artifact.ResolveClosure(roots)
 	if err != nil {
 		return err
 	}
 	for _, r := range closure {
-		if _, err := bottle.Install(r, dir); err != nil {
+		if _, err := artifact.Install(r, dir); err != nil {
 			return fmt.Errorf("%s: %w", r.Project, err)
 		}
 	}
 	if err := trustShimTargets(prefix, dir, closure); err != nil {
 		return err
 	}
-	n, err := bottle.StubBins(closure, dir, prefix)
+	n, err := artifact.StubBins(closure, dir, prefix)
 	if err != nil {
 		return err
 	}
@@ -602,7 +602,7 @@ func cmdOutdated(w io.Writer, prefix string) error {
 			continue
 		}
 		project, have := fields[0], strings.TrimPrefix(fields[1], "v")
-		latest, err := bottle.PickVersion(project, "*")
+		latest, err := artifact.PickVersion(project, "*")
 		if err != nil {
 			unchecked = append(unchecked, fmt.Sprintf("%s: %v", project, err))
 			continue
@@ -655,7 +655,7 @@ func keys(m map[string]string) []string {
 	return out
 }
 
-// installedProjects lists "<project> v<version>" for every installed bottle.
+// installedProjects lists "<project> v<version>" for every installed artifact.
 func installedProjects(dir string) []string {
 	var found []string
 	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
