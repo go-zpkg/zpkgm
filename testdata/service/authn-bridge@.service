@@ -1,11 +1,11 @@
-# pkgm-service project=github.com/go-authn/bridge store=/opt/pkgx
+# pkgm-service project=github.com/go-authn/bridge store=/opt/zpkg
 #
 # Written by `zpkgm service install` from the service block of the
 # github.com/go-authn/bridge recipe. zpkgm rewrites this file: put local changes
 # in a drop-in instead (systemctl edit authn-bridge@.service).
 #
 # The instance is the VERSION: authn-bridge@<version>.service runs
-# /opt/pkgx/github.com/go-authn/bridge/v<version>/bin/authn-bridge.
+# /opt/zpkg/github.com/go-authn/bridge/v<version>/bin/authn-bridge.
 
 [Unit]
 Description=authn-bridge, an OpenID Connect provider in front of a SAML federation
@@ -15,7 +15,7 @@ After=network-online.target
 
 [Service]
 Type=exec
-ExecStart=/opt/pkgx/github.com/go-authn/bridge/v%i/bin/authn-bridge --config /etc/authn-bridge
+ExecStart=/opt/zpkg/github.com/go-authn/bridge/v%i/bin/authn-bridge --config /etc/authn-bridge
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=20s

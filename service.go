@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // `zpkgm service`: run a package's program as a supervised, versioned service.
@@ -31,7 +31,7 @@ import (
 //
 // # THE UNIT IS RENDERED FROM DATA
 //
-// The recipe's `service "<name>" { … }` block (bottle.Service) says what
+// The recipe's `service "<name>" { … }` block (artifact.Service) says what
 // differs between daemons; everything else — the hardening — is written here,
 // once, for every service. It was derived from three hand-written units
 // verified with `systemd-analyze security`: go-authn's authnd, authn-bridge
@@ -75,7 +75,7 @@ var (
 	settleFor   = 5 * time.Second
 	settleEvery = 500 * time.Millisecond
 	sleepFor    = time.Sleep
-	fetchSvc    = bottle.FetchService
+	fetchSvc    = artifact.FetchService
 	// reachable is checkReachable; a test store sits under a 0700 temporary
 	// directory no other account could reach.
 	reachable = checkReachable
@@ -272,7 +272,7 @@ func refuseUninstallInUse(projects []string, store string) error {
 			sort.Strings(vs)
 			for _, v := range vs {
 				lines = append(lines, fmt.Sprintf("  %s@%s.service (%s) runs %s",
-					t.svc, v, strings.Join(states[v], ", "), filepath.Join(store, project, "v"+v)))
+					t.svc, v, strings.Join(states[v], ", "), artifact.StorePrefix(store, project, artifact.ParseVer(v))))
 			}
 			ways = append(ways, fmt.Sprintf("run \"zpkgm service remove %s\" first", t.svc))
 		}
@@ -284,8 +284,8 @@ func refuseUninstallInUse(projects []string, store string) error {
 		strings.Join(lines, "\n"), strings.Join(ways, "\n"))
 }
 
-// sameDir compares two store paths as directories, not as strings: /opt/pkgx
-// and /opt/pkgx/ are one store, and so are a path and a symlink to it.
+// sameDir compares two store paths as directories, not as strings: /opt/zpkg
+// and /opt/zpkg/ are one store, and so are a path and a symlink to it.
 func sameDir(a, b string) bool {
 	if filepath.Clean(a) == filepath.Clean(b) {
 		return true
@@ -299,11 +299,11 @@ func sameDir(a, b string) bool {
 
 // renderUnit writes the template unit for a service.
 //
-// The path in ExecStart comes from bottle.PrefixOf with `%i` for the version,
+// The path in ExecStart comes from artifact.PrefixOf with `%i` for the version,
 // so the convention <store>/<project>/v<version> is spelled in one place, and
 // no version is ever typed into a unit.
-func renderUnit(s *bottle.Service, m unitMarker) string {
-	prefix := bottle.PrefixOf(m.project, []bottle.Resolved{{Project: m.project, Version: bottle.Ver{Raw: "%i"}}}, m.store)
+func renderUnit(s *artifact.Service, m unitMarker) string {
+	prefix := artifact.PrefixOf(m.project, []artifact.Resolved{{Project: m.project, Version: artifact.Ver{Raw: "%i"}}}, m.store)
 	var b strings.Builder
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
 	w("%s", m)
@@ -340,7 +340,7 @@ func renderUnit(s *bottle.Service, m unitMarker) string {
 	w("UMask=0077")
 	dirs := []struct {
 		key string
-		d   *bottle.ServiceDirectory
+		d   *artifact.ServiceDirectory
 	}{
 		{"StateDirectory", s.StateDirectory},
 		{"RuntimeDirectory", s.RuntimeDirectory},
@@ -394,12 +394,12 @@ func renderUnit(s *bottle.Service, m unitMarker) string {
 }
 
 // unitEscape makes prose safe in a unit value: `%` is a specifier there.
-// Newlines and control characters cannot reach this point; bottle refuses
+// Newlines and control characters cannot reach this point; artifact refuses
 // them when it reads the block.
 func unitEscape(s string) string { return strings.ReplaceAll(s, "%", "%%") }
 
 // renderSysusers writes the systemd-sysusers line for the service's account.
-func renderSysusers(s *bottle.Service, m unitMarker) string {
+func renderSysusers(s *artifact.Service, m unitMarker) string {
 	home := "-"
 	if s.StateDirectory != nil {
 		home = "/var/lib/" + s.Name
@@ -448,7 +448,7 @@ func checkStore(store string) error {
 	for _, r := range protectedStoreRoots {
 		if store == r || strings.HasPrefix(store, r+"/") {
 			return fmt.Errorf("the store %s is under %s, which the service's sandbox hides (ProtectHome=, PrivateTmp=): "+
-				"set ZPKG_DIR to a directory outside /home, /root, /run/user and /tmp, e.g. /opt/pkgx", store, r)
+				"set ZPKG_DIR to a directory outside /home, /root, /run/user and /tmp, e.g. /opt/zpkg", store, r)
 		}
 	}
 	return nil
@@ -476,7 +476,7 @@ func checkReachable(bin, user string) error {
 // does not provide, or one that needs a dynamic loader. A unit is shared by
 // every version, so it cannot carry one version's LD_LIBRARY_PATH the way a
 // stub does; a static program needs none.
-func checkProgram(project string, s *bottle.Service, provides []string, bin string) error {
+func checkProgram(project string, s *artifact.Service, provides []string, bin string) error {
 	declared := false
 	for _, p := range provides {
 		declared = declared || p == "bin/"+s.Command
@@ -486,9 +486,9 @@ func checkProgram(project string, s *bottle.Service, provides []string, bin stri
 			project, s.Name, s.Command, strings.Join(provides, ", "))
 	}
 	if _, err := os.Stat(bin); err != nil {
-		return fmt.Errorf("%s: %s is not in the installed bottle", project, bin)
+		return fmt.Errorf("%s: %s is not in the installed artifact", project, bin)
 	}
-	interp, err := bottle.ELFInterp(bin)
+	interp, err := artifact.ELFInterp(bin)
 	if err != nil {
 		return fmt.Errorf("%s: %s is not an ELF program (%v); zpkgm service runs statically linked programs only", project, bin, err)
 	}
@@ -518,13 +518,13 @@ func serviceConstraint(arg string) (project, constraint string) {
 // ensureInstalled resolves and installs the closure, returning the version and
 // the closure itself — the caller needs it to judge who owns the paths the
 // unit is about to record (see trustStore, and go-zpkg/zpkgm#73).
-func ensureInstalled(project, constraint, store string) (string, []bottle.Resolved, error) {
-	closure, err := bottle.ResolveClosure(map[string]string{project: constraint})
+func ensureInstalled(project, constraint, store string) (string, []artifact.Resolved, error) {
+	closure, err := artifact.ResolveClosure(map[string]string{project: constraint})
 	if err != nil {
 		return "", nil, err
 	}
 	for _, r := range closure {
-		fresh, err := bottle.Install(r, store)
+		fresh, err := artifact.Install(r, store)
 		if err != nil {
 			return "", nil, fmt.Errorf("%s: %w", r.Project, err)
 		}
@@ -534,14 +534,14 @@ func ensureInstalled(project, constraint, store string) (string, []bottle.Resolv
 		}
 		fmt.Printf("  %-9s %s v%s\n", state, r.Project, r.Version.Raw)
 	}
-	prefix := bottle.PrefixOf(project, closure, store)
+	prefix := artifact.PrefixOf(project, closure, store)
 	return strings.TrimPrefix(filepath.Base(prefix), "v"), closure, nil
 }
 
 // prepare fetches the service block, installs the version and checks that the
 // unit zpkgm would write can run it. It returns the service, the version and
 // the template that would be written.
-func prepare(project, constraint, store string) (*bottle.Service, string, error) {
+func prepare(project, constraint, store string) (*artifact.Service, string, error) {
 	if err := checkStore(store); err != nil {
 		return nil, "", err
 	}
@@ -561,7 +561,7 @@ func prepare(project, constraint, store string) (*bottle.Service, string, error)
 	// store anyone else can write is go-zpkg/zpkgm#73 with a worse blast
 	// radius than the shim it was reported against. checkStore above refuses
 	// a store under /home, /root, /run/user or /tmp because the sandbox hides
-	// those — a different question from who OWNS it, and /opt/pkgx owned by
+	// those — a different question from who OWNS it, and /opt/zpkg owned by
 	// an ordinary user passes that check and fails this one.
 	if err := trustStore(unitDir, store, closure); err != nil {
 		return nil, "", err
@@ -569,11 +569,14 @@ func prepare(project, constraint, store string) (*bottle.Service, string, error)
 	if !versionRE.MatchString(v) {
 		return nil, "", fmt.Errorf("%s: version %q cannot be a unit instance name", project, v)
 	}
-	_, provides, err := bottle.FetchMeta(project)
+	_, provides, err := artifact.FetchMeta(project)
 	if err != nil {
 		return nil, "", err
 	}
-	bin := filepath.Join(store, project, "v"+v, "bin", s.Command)
+	// ⛔ ASKED FOR, NOT COMPOSED: an installed directory carries a variant
+	// hash, so "v"+v names a path that does not exist (go-zpkg/artifact's
+	// StorePrefix is the only thing that composes one).
+	bin := filepath.Join(artifact.StorePrefix(store, project, artifact.ParseVer(v)), "bin", s.Command)
 	if err := checkProgram(project, s, provides, bin); err != nil {
 		return nil, "", err
 	}
@@ -685,7 +688,7 @@ func serviceInstall(arg string, w io.Writer) error {
 		return err
 	}
 	project, constraint := serviceConstraint(arg)
-	store := bottle.Dir()
+	store := artifact.Dir()
 	s, v, err := prepare(project, constraint, store)
 	if err != nil {
 		return err
@@ -728,7 +731,8 @@ func serviceInstall(arg string, w io.Writer) error {
 	if ok, state := settled(systemctl, unit); !ok {
 		return fmt.Errorf("%s was started and did not stay active (%s): see `journalctl -u %s`", unit, state, unit)
 	}
-	fmt.Fprintf(w, "%s: %s is active, running %s\n", s.Name, unit, filepath.Join(store, project, "v"+v, "bin", s.Command))
+	fmt.Fprintf(w, "%s: %s is active, running %s\n", s.Name, unit,
+		filepath.Join(artifact.StorePrefix(store, project, artifact.ParseVer(v)), "bin", s.Command))
 	if changed && strings.TrimSpace(wasActive) == "active" {
 		fmt.Fprintf(w, "the unit changed while %s was running: `systemctl restart %s` applies it\n", unit, unit)
 	}
@@ -814,7 +818,7 @@ func serviceSwitch(arg string, w io.Writer) error {
 	if constraint == "*" {
 		return fmt.Errorf("zpkgm service switch needs a version: %s@<version>", project)
 	}
-	store := bottle.Dir()
+	store := artifact.Dir()
 	s, v, err := prepare(project, constraint, store)
 	if err != nil {
 		return err
@@ -868,7 +872,7 @@ func serviceRollback(svc string, w io.Writer) error {
 	if !versionRE.MatchString(to) {
 		return fmt.Errorf("%s: previous version %q in %s is not a version", svc, to, t.path)
 	}
-	if st, err := os.Stat(filepath.Join(t.marker.store, t.marker.project, "v"+to)); err != nil || !st.IsDir() {
+	if st, err := os.Stat(artifact.StorePrefix(t.marker.store, t.marker.project, artifact.ParseVer(to))); err != nil || !st.IsDir() {
 		return fmt.Errorf("%s: %s is no longer in the store (%s): `zpkgm service switch %s@%s` installs it again",
 			svc, to, filepath.Join(t.marker.store, t.marker.project), t.marker.project, to)
 	}

@@ -15,7 +15,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // lockClosure reads a lockfile and returns EXACTLY what it pins, with no
@@ -24,13 +24,13 @@ import (
 // The order is whatever the file lists; `bk lock` writes its pins sorted, and
 // nothing here depends on the sequence — a locked set is a set.
 //
-// ⛔ IT DOES NOT WALK THE DEPENDENCY GRAPH. `bottle.ResolveClosure` asks the
+// ⛔ IT DOES NOT WALK THE DEPENDENCY GRAPH. `artifact.ResolveClosure` asks the
 // registry what the newest satisfying version is today, which is the question
 // a lock exists to stop anyone asking. Every pin is installed — not just the
 // roots — because the roots are the only part of a lock that a resolver could
 // reconstruct, and reconstructing it is what makes two installs differ.
-func lockClosure(path, osn, arch string) ([]bottle.Resolved, error) {
-	d, err := bottle.ReadLock(path)
+func lockClosure(path, osn, arch string) ([]artifact.Resolved, error) {
+	d, err := artifact.ReadLock(path)
 	if err != nil {
 		return nil, err
 	}
@@ -39,13 +39,13 @@ func lockClosure(path, osn, arch string) ([]bottle.Resolved, error) {
 	// point of the field. Its versions answer "the newest these recipes can
 	// BUILD", which is not "the newest the factory has PUBLISHED for this
 	// platform" — measured upstream at 2 of 5 pins for curl.se on
-	// linux/aarch64. Installing one would ask the registry for bottles that
+	// linux/aarch64. Installing one would ask the registry for artifacts that
 	// were never built, and the failure would name a missing version rather
 	// than the wrong KIND of lock.
 	//
 	// An empty field means `recipes`: that is what every lock written before
 	// the field existed holds, so the default must refuse too.
-	if mode := bottle.LockPinned(d); mode != bottle.PinsPublished {
+	if mode := artifact.LockPinned(d); mode != artifact.PinsPublished {
 		return nil, fmt.Errorf(
 			"%s pins %q versions, which cannot be installed: they are the newest the recipes can BUILD, not the newest published for this platform — rewrite it with `bk lock -runnable`",
 			path, mode)
@@ -63,14 +63,14 @@ func lockClosure(path, osn, arch string) ([]bottle.Resolved, error) {
 			path, d.Platform, want)
 	}
 
-	// A lock with no pins needs no check here: `bottle.ReadLock` already
+	// A lock with no pins needs no check here: `artifact.ReadLock` already
 	// refuses it with "no `locked` entries — this is not a lock". A guard of
 	// my own would be unreachable code that reads as the thing keeping an
 	// empty install from being reported as a success.
 
-	out := make([]bottle.Resolved, 0, len(d.Pins))
+	out := make([]artifact.Resolved, 0, len(d.Pins))
 	for _, p := range d.Pins {
-		out = append(out, bottle.Resolved{Project: p.Project, Version: bottle.ParseVer(p.Version)})
+		out = append(out, artifact.Resolved{Project: p.Project, Version: artifact.ParseVer(p.Version)})
 	}
 	return out, nil
 }
@@ -81,7 +81,7 @@ func cmdInstallLock(args []string, prefix string, f flags) error {
 	if err := lockConflict(args, f); err != nil {
 		return err
 	}
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 	closure, err := lockClosure(f.lock, osn, arch)
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func cmdInstallLock(args []string, prefix string, f flags) error {
 	if err := trustShimTargets(prefix, dir, closure); err != nil {
 		return err
 	}
-	n, err := bottle.StubBins(closure, dir, prefix)
+	n, err := artifact.StubBins(closure, dir, prefix)
 	if err != nil {
 		return err
 	}
@@ -103,9 +103,9 @@ func cmdInstallLock(args []string, prefix string, f flags) error {
 }
 
 // installLocked installs every pin and reports what each one did.
-func installLocked(w io.Writer, closure []bottle.Resolved, dir string) error {
+func installLocked(w io.Writer, closure []artifact.Resolved, dir string) error {
 	for _, r := range closure {
-		fresh, err := bottle.Install(r, dir)
+		fresh, err := artifact.Install(r, dir)
 		if err != nil {
 			return fmt.Errorf("%s: %w", r.Project, err)
 		}

@@ -1,4 +1,4 @@
-# pkgm-service project=github.com/go-authn/revocation store=/opt/pkgx
+# pkgm-service project=github.com/go-authn/revocation store=/opt/zpkg
 #
 # The account authn-revokd@.service runs as, written by `zpkgm service install`.
 # A static account, not DynamicUser=: its files must keep one owner across

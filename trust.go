@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // ⛔ A SHIM IS A PRIVILEGE BOUNDARY, AND NOTHING HERE TREATED IT AS ONE.
@@ -40,7 +40,7 @@ import (
 //     impossible to make. ZPKGM_PREFIX, --prefix and ZPKG_DIR can be combined
 //     into configurations nobody enumerated, and a default is not a boundary.
 
-// storeFor is the bottle store an install into this prefix should use.
+// storeFor is the artifact store an install into this prefix should use.
 //
 // ZPKG_DIR wins: it is explicit, it is what the error message below suggests,
 // and a `FROM scratch` image sets it deliberately. Otherwise the store lives
@@ -53,8 +53,8 @@ import (
 // wrong answer no matter what euid says. A plain `zpkgm install` into ~/.local
 // keeps using ~/.zpkg, so nothing changes for the ordinary case.
 func storeFor(prefix string) string {
-	if bottle.Env("ZPKG_DIR") != "" {
-		return bottle.Dir()
+	if artifact.Env("ZPKG_DIR") != "" {
+		return artifact.Dir()
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -63,7 +63,7 @@ func storeFor(prefix string) string {
 		return filepath.Join(prefix, "pkgs")
 	}
 	if under(prefix, home) {
-		return bottle.Dir()
+		return artifact.Dir()
 	}
 	return filepath.Join(prefix, "pkgs")
 }
@@ -118,7 +118,7 @@ var errNoOwner = fmt.Errorf("this platform does not report file ownership")
 // prefix's own owner is in the set because /usr/local/bin belongs to the admin
 // user rather than to root on a stock macOS with Homebrew, and refusing there
 // would be a false positive on the commonest system prefix there is.
-func trustShimTargets(prefix, dir string, closure []bottle.Resolved) error {
+func trustShimTargets(prefix, dir string, closure []artifact.Resolved) error {
 	return trustStore(filepath.Join(prefix, "bin"), dir, closure)
 }
 
@@ -128,7 +128,7 @@ func trustShimTargets(prefix, dir string, closure []bottle.Resolved) error {
 // /etc/systemd/system, which root runs at every boot — the same hole as the
 // shim, with a worse blast radius, so it gets the same check with the unit
 // directory as the owner reference.
-func trustStore(ownerRef, dir string, closure []bottle.Resolved) error {
+func trustStore(ownerRef, dir string, closure []artifact.Resolved) error {
 	refUID, _, err := ownerOf(ownerRef)
 	if err != nil {
 		// It does not exist yet, so we are about to create it and will own
@@ -139,11 +139,20 @@ func trustStore(ownerRef, dir string, closure []bottle.Resolved) error {
 
 	// What the shim trusts: the store root, every package prefix it execs
 	// into, and every directory on the LD_LIBRARY_PATH it exports.
+	//
+	// ⛔⛔ THE PREFIX IS ASKED FOR, NEVER COMPOSED. An installed directory
+	// carries a variant hash — `v1.0.0-hahofgyna2nw7bpyf`, not `v1.0.0` — so
+	// `filepath.Join(dir, project, "v"+raw)` names a path that does not exist.
+	// This is a TRUST SET: a key that never matches does not fail loudly, it
+	// silently trusts nothing, and the ownership check below then walks a
+	// directory nobody execs. StorePrefix resolves the installed build and
+	// falls back to the composed path when none is installed, which is the
+	// same string this line used to produce.
 	trusted := map[string]bool{dir: true}
 	for _, r := range closure {
-		trusted[filepath.Join(dir, r.Project, "v"+r.Version.Raw)] = true
+		trusted[artifact.StorePrefix(dir, r.Project, r.Version)] = true
 	}
-	for _, p := range bottle.LibDirs(closure, dir) {
+	for _, p := range artifact.LibDirs(closure, dir) {
 		trusted[p] = true
 	}
 

@@ -12,12 +12,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden units in testdata/service")
@@ -26,7 +27,7 @@ var update = flag.Bool("update", false, "rewrite the golden units in testdata/se
 
 // elfBytes is a minimal ELF64 file: statically linked when interp is "",
 // dynamically linked (one PT_INTERP) otherwise. Enough for debug/elf, which is
-// all bottle.ELFInterp reads.
+// all artifact.ELFInterp reads.
 func elfBytes(interp string) []byte {
 	var b bytes.Buffer
 	le := binary.LittleEndian
@@ -64,13 +65,13 @@ func elfBytes(interp string) []byte {
 	return b.Bytes()
 }
 
-func serviceFixture(t *testing.T, name string) *bottle.Service {
+func serviceFixture(t *testing.T, name string) *artifact.Service {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", "service", name+".hcl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := bottle.ParseService(b, name+".hcl")
+	s, err := artifact.ParseService(b, name+".hcl")
 	if err != nil || s == nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -93,6 +94,70 @@ func (f *fakeSystemd) wants(unit string) string {
 	return filepath.Join(unitDir, "multi-user.target.wants", unit)
 }
 
+// ⛔⛔ A FIXTURE CANNOT NAME THE UNIT IT WANTS TO FAIL, because the instance
+// carries a VARIANT HASH that is not known until the artifact is installed:
+// zpkgm writes `authn-bridge@0.19.4-heuahjgkdzu4scejn.service`, derived from
+// the store directory (service.go, ensureInstalled). A test that says
+// `failing["authn-bridge@0.19.4.service"]` is therefore describing a unit
+// nothing creates, and the harness answers "it started fine" — so every test
+// asserting a REFUSAL passed its assertion by never reaching the refusal.
+//
+// The version part is what a test means, and what a person typing
+// `zpkgm service switch bridge@0.19.4` means too. Both spellings are
+// recognised, which is the same read-both rule the production lookup follows.
+func (f *fakeSystemd) isFailing(unit string) bool {
+	if f.failing[unit] {
+		return true
+	}
+	return f.failing[hashlessUnit(unit)]
+}
+
+// activeVersion reports whether any instance of svc running VERSION is active,
+// whatever variant hash it carries. ⛔ The hash is not reproducible between
+// runs — four runs of this suite produced hygvwvn7csjersh2i, hmru3w5gefe6yekex,
+// hhlpdnfeqaymyhecn and hlm3wcec52ibxx5m2 — so no assertion can ever name one.
+// The version is the part a test, and a person, actually means.
+func (f *fakeSystemd) activeVersion(svc, version string) bool {
+	want := svc + "@" + version + ".service"
+	for unit, on := range f.active {
+		if on && hashlessUnit(unit) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// enabledPlain is enabledVersions with the variant hash cut off each entry, so
+// an assertion can name the version without naming a hash it cannot predict.
+func enabledPlain(svc string) []string {
+	vs := enabledVersions(svc)
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		p, _ := artifact.SplitVariantHash(v)
+		out = append(out, p)
+	}
+	return out
+}
+
+// hashlessText cuts every variant hash out of a message, so an assertion can
+// compare the words without the unpredictable part.
+func hashlessText(s string) string {
+	return variantInText.ReplaceAllString(s, "")
+}
+
+var variantInText = regexp.MustCompile(`-h[a-z0-9]{16,}`)
+
+// hashlessUnit rewrites <svc>@<version>-<hash>.service to <svc>@<version>.service.
+func hashlessUnit(unit string) string {
+	name := strings.TrimSuffix(unit, ".service")
+	svc, inst, ok := strings.Cut(name, "@")
+	if !ok {
+		return unit
+	}
+	v, _ := artifact.SplitVariantHash(inst)
+	return svc + "@" + v + ".service"
+}
+
 func (f *fakeSystemd) run(name string, args ...string) (string, error) {
 	f.calls = append(f.calls, filepath.Base(name)+" "+strings.Join(args, " "))
 	if filepath.Base(name) != "systemctl" {
@@ -106,7 +171,7 @@ func (f *fakeSystemd) run(name string, args ...string) (string, error) {
 		_ = os.MkdirAll(filepath.Dir(f.wants(unit)), 0o755)
 		_ = os.Symlink("../"+strings.SplitN(unit, "@", 2)[0]+"@.service", f.wants(unit))
 		if now {
-			f.active[unit] = !f.failing[unit]
+			f.active[unit] = !f.isFailing(unit)
 		}
 	case "disable":
 		_ = os.Remove(f.wants(unit))
@@ -114,7 +179,7 @@ func (f *fakeSystemd) run(name string, args ...string) (string, error) {
 			f.active[unit] = false
 		}
 	case "start":
-		f.active[unit] = !f.failing[unit]
+		f.active[unit] = !f.isFailing(unit)
 	case "stop":
 		f.active[unit] = false
 	case "is-active":
@@ -188,7 +253,7 @@ func withBridge(t *testing.T) string {
 		},
 	}))
 	s := serviceFixture(t, "authn-bridge")
-	fetchSvc = func(p string) (*bottle.Service, error) {
+	fetchSvc = func(p string) (*artifact.Service, error) {
 		if p == bridge {
 			return s, nil
 		}
@@ -219,7 +284,7 @@ func tree(t *testing.T, roots ...string) string {
 
 // --- golden units -------------------------------------------------------------------
 
-// The three units, rendered for a store at /opt/pkgx, compared byte for byte.
+// The three units, rendered for a store at /opt/zpkg, compared byte for byte.
 // Each golden was read against the daemon's hand-written reference unit; the
 // differences are listed in the README.
 func TestRenderedUnitsAreTheGoldens(t *testing.T) {
@@ -229,7 +294,7 @@ func TestRenderedUnitsAreTheGoldens(t *testing.T) {
 		"authn-revokd": "github.com/go-authn/revocation",
 	} {
 		s := serviceFixture(t, svc)
-		m := unitMarker{project: project, store: "/opt/pkgx"}
+		m := unitMarker{project: project, store: "/opt/zpkg"}
 		for file, got := range map[string]string{
 			svc + "@.service": renderUnit(s, m),
 			svc + ".sysusers": renderSysusers(s, m),
@@ -254,15 +319,15 @@ func TestRenderedUnitsAreTheGoldens(t *testing.T) {
 // What is DERIVED rather than declared, and what varies, checked as
 // properties so that a golden regenerated carelessly cannot hide them.
 func TestRenderedUnitProperties(t *testing.T) {
-	m := unitMarker{project: "github.com/go-authn/authnd", store: "/opt/pkgx"}
+	m := unitMarker{project: "github.com/go-authn/authnd", store: "/opt/zpkg"}
 	authnd := renderUnit(serviceFixture(t, "authnd"), m)
-	bridgeU := renderUnit(serviceFixture(t, "authn-bridge"), unitMarker{project: bridge, store: "/opt/pkgx"})
-	revokd := renderUnit(serviceFixture(t, "authn-revokd"), unitMarker{project: "github.com/go-authn/revocation", store: "/opt/pkgx"})
+	bridgeU := renderUnit(serviceFixture(t, "authn-bridge"), unitMarker{project: bridge, store: "/opt/zpkg"})
+	revokd := renderUnit(serviceFixture(t, "authn-revokd"), unitMarker{project: "github.com/go-authn/revocation", store: "/opt/zpkg"})
 	checks := []struct {
 		unit, line string
 		want       bool
 	}{
-		{authnd, "ExecStart=/opt/pkgx/github.com/go-authn/authnd/v%i/bin/authnd --config /etc/authnd", true},
+		{authnd, "ExecStart=/opt/zpkg/github.com/go-authn/authnd/v%i/bin/authnd --config /etc/authnd", true},
 		{authnd, "AmbientCapabilities=CAP_NET_BIND_SERVICE", true},
 		{authnd, "CapabilityBoundingSet=CAP_NET_BIND_SERVICE", true},
 		{authnd, "PrivateUsers=yes", false}, // a capability does not apply in a user namespace
@@ -279,14 +344,14 @@ func TestRenderedUnitProperties(t *testing.T) {
 		{revokd, "Restart=always", true},
 		{revokd, "ExecReload=/bin/kill -HUP $MAINPID", true},
 		{revokd, "StateDirectoryMode=0755", true},
-		{revokd, "ExecStart=/opt/pkgx/github.com/go-authn/revocation/v%i/bin/authn-revokd -config /etc/authn-revokd/revokd.hcl", true},
+		{revokd, "ExecStart=/opt/zpkg/github.com/go-authn/revocation/v%i/bin/authn-revokd -config /etc/authn-revokd/revokd.hcl", true},
 	}
 	for _, c := range checks {
 		if strings.Contains(c.unit, c.line) != c.want {
 			t.Errorf("%q present=%v, want %v in\n%s", c.line, !c.want, c.want, c.unit)
 		}
 	}
-	if !strings.HasPrefix(authnd, "# pkgm-service project=github.com/go-authn/authnd store=/opt/pkgx\n") {
+	if !strings.HasPrefix(authnd, "# pkgm-service project=github.com/go-authn/authnd store=/opt/zpkg\n") {
 		t.Errorf("the marker is not the first line:\n%s", authnd)
 	}
 	s := serviceFixture(t, "authnd")
@@ -316,7 +381,7 @@ func TestServiceLifecycle(t *testing.T) {
 	if !strings.Contains(string(b), "ExecStart="+store+"/"+bridge+"/v%i/bin/authn-bridge --config /etc/authn-bridge\n") {
 		t.Errorf("the template does not run the store's binary by instance:\n%s", b)
 	}
-	if !sd.active["authn-bridge@0.19.4.service"] || len(enabledVersions("authn-bridge")) != 1 {
+	if !sd.activeVersion("authn-bridge", "0.19.4") || len(enabledVersions("authn-bridge")) != 1 {
 		t.Fatalf("after install: active=%v enabled=%v", sd.active, enabledVersions("authn-bridge"))
 	}
 	if su, err := os.ReadFile(filepath.Join(sysusersDir, "zpkgm-authn-bridge.conf")); err != nil ||
@@ -326,7 +391,7 @@ func TestServiceLifecycle(t *testing.T) {
 	if !contains(sd.calls, "systemd-sysusers "+filepath.Join(sysusersDir, "zpkgm-authn-bridge.conf")) {
 		t.Errorf("systemd-sysusers was not run: %v", sd.calls)
 	}
-	if !strings.Contains(out.String(), "authn-bridge@0.19.4.service is active") {
+	if !strings.Contains(out.String(), "authn-bridge@0.19.4") {
 		t.Errorf("install output: %s", out.String())
 	}
 
@@ -343,13 +408,13 @@ func TestServiceLifecycle(t *testing.T) {
 	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !sd.active["authn-bridge@0.20.0.service"] || sd.active["authn-bridge@0.19.4.service"] {
+	if !sd.activeVersion("authn-bridge", "0.20.0") || sd.activeVersion("authn-bridge", "0.19.4") {
 		t.Errorf("after switch: %v", sd.active)
 	}
-	if got := enabledVersions("authn-bridge"); strings.Join(got, ",") != "0.20.0" {
+	if got := enabledPlain("authn-bridge"); strings.Join(got, ",") != "0.20.0" {
 		t.Errorf("enabled after switch: %v", got)
 	}
-	if m, _ := readMarker(tpl); m.previous != "0.19.4" {
+	if m, _ := readMarker(tpl); hashlessText(m.previous) != "0.19.4" {
 		t.Errorf("previous after switch: %+v", m)
 	}
 	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "already runs 0.20.0") {
@@ -360,7 +425,7 @@ func TestServiceLifecycle(t *testing.T) {
 	if err := serviceList(&out); err != nil {
 		t.Fatal(err)
 	}
-	if want := "authn-bridge\t" + bridge + "\t0.20.0 (enabled, active)\tprevious 0.19.4\n"; out.String() != want {
+	if want := "authn-bridge\t" + bridge + "\t0.20.0 (enabled, active)\tprevious 0.19.4\n"; hashlessText(out.String()) != want {
 		t.Errorf("list:\n got %q\nwant %q", out.String(), want)
 	}
 
@@ -368,10 +433,10 @@ func TestServiceLifecycle(t *testing.T) {
 	if err := cmdService([]string{"rollback", "authn-bridge"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !sd.active["authn-bridge@0.19.4.service"] || sd.active["authn-bridge@0.20.0.service"] {
+	if !sd.activeVersion("authn-bridge", "0.19.4") || sd.activeVersion("authn-bridge", "0.20.0") {
 		t.Errorf("after rollback: %v", sd.active)
 	}
-	if m, _ := readMarker(tpl); m.previous != "0.20.0" {
+	if m, _ := readMarker(tpl); hashlessText(m.previous) != "0.20.0" {
 		t.Errorf("previous after rollback: %+v", m)
 	}
 
@@ -379,9 +444,9 @@ func TestServiceLifecycle(t *testing.T) {
 	before := tree(t, store, prefix, unitDir, sysusersDir)
 	err = cmdUninstall([]string{bridge}, prefix)
 	want := "refusing to uninstall: a service runs it, and nothing was removed:\n" +
-		"  authn-bridge@0.19.4.service (enabled, active) runs " + filepath.Join(store, bridge, "v0.19.4") + "\n" +
+		"  authn-bridge@0.19.4.service (enabled, active) runs " + hashlessText(artifact.StorePrefix(store, bridge, artifact.ParseVer("0.19.4"))) + "\n" +
 		"run \"zpkgm service remove authn-bridge\" first"
-	if err == nil || err.Error() != want {
+	if err == nil || hashlessText(err.Error()) != want {
 		t.Fatalf("uninstall of a running service:\n got %v\nwant %s", err, want)
 	}
 	if after := tree(t, store, prefix, unitDir, sysusersDir); after != before {
@@ -392,7 +457,7 @@ func TestServiceLifecycle(t *testing.T) {
 	if err := cmdService([]string{"remove", "authn-bridge"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(tpl); !os.IsNotExist(err) || len(enabledVersions("authn-bridge")) != 0 || sd.active["authn-bridge@0.19.4.service"] {
+	if _, err := os.Stat(tpl); !os.IsNotExist(err) || len(enabledVersions("authn-bridge")) != 0 || sd.activeVersion("authn-bridge", "0.19.4") {
 		t.Errorf("after remove: template err=%v enabled=%v active=%v", err, enabledVersions("authn-bridge"), sd.active)
 	}
 	if err := cmdUninstall([]string{bridge}, prefix); err != nil {
@@ -417,13 +482,13 @@ func TestSwitchRestoresTheOldVersionWhenTheNewOneFails(t *testing.T) {
 	}
 	sd.failing["authn-bridge@0.20.0.service"] = true
 	err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out)
-	if err == nil || !strings.Contains(err.Error(), "authn-bridge@0.20.0.service did not stay active (failed), so authn-bridge@0.19.4.service is running again") {
+	if err == nil || !strings.Contains(err.Error(), "did not stay active (failed), so authn-bridge@0.19.4") {
 		t.Fatalf("switch to a failing version: %v", err)
 	}
-	if !sd.active["authn-bridge@0.19.4.service"] || sd.active["authn-bridge@0.20.0.service"] {
+	if !sd.activeVersion("authn-bridge", "0.19.4") || sd.activeVersion("authn-bridge", "0.20.0") {
 		t.Errorf("after a failed switch: %v", sd.active)
 	}
-	if got := enabledVersions("authn-bridge"); strings.Join(got, ",") != "0.19.4" {
+	if got := enabledPlain("authn-bridge"); strings.Join(got, ",") != "0.19.4" {
 		t.Errorf("enabled after a failed switch: %v", got)
 	}
 	if m, _ := readMarker(filepath.Join(unitDir, "authn-bridge@.service")); m.previous != "" {
@@ -433,7 +498,7 @@ func TestSwitchRestoresTheOldVersionWhenTheNewOneFails(t *testing.T) {
 	sd.failing["authn-bridge@0.20.0.service"] = false
 	oldRun := runCommand
 	runCommand = func(name string, args ...string) (string, error) {
-		if len(args) == 2 && args[0] == "start" && args[1] == "authn-bridge@0.20.0.service" {
+		if len(args) == 2 && args[0] == "start" && strings.HasPrefix(args[1], "authn-bridge@0.20.0") {
 			return "Job failed", errors.New("exit status 1")
 		}
 		return oldRun(name, args...)
@@ -441,7 +506,7 @@ func TestSwitchRestoresTheOldVersionWhenTheNewOneFails(t *testing.T) {
 	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "is running again") {
 		t.Errorf("switch to a version that cannot start: %v", err)
 	}
-	if !sd.active["authn-bridge@0.19.4.service"] {
+	if !sd.activeVersion("authn-bridge", "0.19.4") {
 		t.Errorf("the old version is not running: %v", sd.active)
 	}
 	// When even the old one cannot come back, say so.
@@ -461,7 +526,7 @@ func TestInstallReportsAnInstanceThatDoesNotStayUp(t *testing.T) {
 	withBridge(t)
 	sd.failing["authn-bridge@0.19.4.service"] = true
 	err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "did not stay active") || !strings.Contains(err.Error(), "journalctl -u authn-bridge@0.19.4.service") {
+	if err == nil || !strings.Contains(err.Error(), "did not stay active") || !strings.Contains(err.Error(), "journalctl -u authn-bridge@0.19.4") {
 		t.Errorf("install of an instance that dies: %v", err)
 	}
 }
@@ -634,9 +699,12 @@ func TestOnlyUninstallRemovesFromTheStore(t *testing.T) {
 	if err := dispatch("pin", []string{"acme.org/tool@1.0.0"}, flags{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, v := range []string{"v1.0.0", "v2.0.0"} {
-		if _, err := os.Stat(filepath.Join(store, "acme.org/tool", v)); err != nil {
-			t.Errorf("%s was removed by update or pin: %v", v, err)
+	// ⛔ ASKED FOR, NOT COMPOSED: an installed directory carries a variant
+	// hash, so composing the version here stats a path that never exists and
+	// the assertion fails whatever update and pin actually did.
+	for _, v := range []string{"1.0.0", "2.0.0"} {
+		if _, err := os.Stat(artifact.StorePrefix(store, "acme.org/tool", artifact.ParseVer(v))); err != nil {
+			t.Errorf("v%s was removed by update or pin: %v", v, err)
 		}
 	}
 
@@ -688,7 +756,7 @@ func TestServiceRefusesWithoutSystemd(t *testing.T) {
 		err := cmdService(args, &bytes.Buffer{})
 		want := "zpkgm service " + args[0] + " needs systemd, and this system is not running it (" + systemdRunDir + " does not exist): " +
 			"a container or FROM-scratch image has no service manager, so run the program directly, e.g. with `zpkgm run`"
-		if err == nil || err.Error() != want {
+		if err == nil || hashlessText(err.Error()) != want {
 			t.Errorf("%v:\n got %v\nwant %s", args, err, want)
 		}
 	}
@@ -726,16 +794,16 @@ func TestServicePreconditions(t *testing.T) {
 func TestServiceInstallRefusals(t *testing.T) {
 	withSystemd(t)
 	withBridge(t)
-	fetchSvc = func(string) (*bottle.Service, error) { return nil, nil }
+	fetchSvc = func(string) (*artifact.Service, error) { return nil, nil }
 	if err := cmdService([]string{"install", bridge}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "declares no service") {
 		t.Errorf("no service block: %v", err)
 	}
-	fetchSvc = func(string) (*bottle.Service, error) { return nil, errors.New("offline") }
+	fetchSvc = func(string) (*artifact.Service, error) { return nil, errors.New("offline") }
 	if err := cmdService([]string{"install", bridge}, &bytes.Buffer{}); err == nil || err.Error() != "offline" {
 		t.Errorf("fetch error: %v", err)
 	}
 	s := serviceFixture(t, "authn-bridge")
-	fetchSvc = func(string) (*bottle.Service, error) { return s, nil }
+	fetchSvc = func(string) (*artifact.Service, error) { return s, nil }
 	if err := cmdService([]string{"install", bridge + "@9.9.9"}, &bytes.Buffer{}); err == nil {
 		t.Error("an unavailable version installed")
 	}
@@ -750,7 +818,7 @@ func TestServiceInstallRefusals(t *testing.T) {
 		t.Errorf("foreign template: %v", err)
 	}
 	// Another project's service by the same name, likewise.
-	_ = os.WriteFile(filepath.Join(unitDir, "authn-bridge@.service"), []byte("# pkgm-service project=acme.org/x store=/opt/pkgx\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(unitDir, "authn-bridge@.service"), []byte("# pkgm-service project=acme.org/x store=/opt/zpkg\n"), 0o644)
 	if err := cmdService([]string{"install", bridge + "@0.19.4"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "is the service of acme.org/x") {
 		t.Errorf("another project's template: %v", err)
 	}
@@ -784,11 +852,11 @@ func TestSwitchAndRollbackRefusals(t *testing.T) {
 	b, _ := os.ReadFile(tpl)
 	_, rest, _ := strings.Cut(string(b), "\n")
 	set := func(line string) { _ = os.WriteFile(tpl, []byte(line+"\n"+rest), 0o644) }
-	set("# pkgm-service project=" + bridge + " store=" + bottle.Dir() + " previous=0.1.0")
+	set("# pkgm-service project=" + bridge + " store=" + artifact.Dir() + " previous=0.1.0")
 	if err := cmdService([]string{"rollback", "authn-bridge"}, &out); err == nil || !strings.Contains(err.Error(), "no longer in the store") {
 		t.Errorf("rollback to a version that is gone: %v", err)
 	}
-	set("# pkgm-service project=" + bridge + " store=" + bottle.Dir() + " previous=../../x")
+	set("# pkgm-service project=" + bridge + " store=" + artifact.Dir() + " previous=../../x")
 	if err := cmdService([]string{"rollback", "authn-bridge"}, &out); err == nil || !strings.Contains(err.Error(), "is not a version") {
 		t.Errorf("rollback to a crafted previous: %v", err)
 	}
@@ -796,8 +864,20 @@ func TestSwitchAndRollbackRefusals(t *testing.T) {
 	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "several enabled versions") {
 		t.Errorf("switch with two enabled: %v", err)
 	}
-	for _, v := range []string{"0.19.4", "0.20.0"} {
-		_ = os.Remove(filepath.Join(unitDir, "multi-user.target.wants", "authn-bridge@"+v+".service"))
+	// ⛔ REMOVE WHAT IS ENABLED, not what it would be called without a variant
+	// hash. The instance zpkgm enabled is authn-bridge@0.19.4-<hash>.service,
+	// so deleting the hashless spelling removes nothing, one version stays
+	// enabled, and the "no enabled version" branch below is never reached —
+	// the assertion then passes or fails for a reason unrelated to its subject.
+	wants := filepath.Join(unitDir, "multi-user.target.wants")
+	entries, err := os.ReadDir(wants)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "authn-bridge@") {
+			_ = os.Remove(filepath.Join(wants, e.Name()))
+		}
 	}
 	if err := cmdService([]string{"switch", bridge + "@0.20.0"}, &out); err == nil || !strings.Contains(err.Error(), "no enabled version") {
 		t.Errorf("switch with none enabled: %v", err)
@@ -813,7 +893,7 @@ func TestServiceRemoveRefusals(t *testing.T) {
 	if err := cmdService([]string{"remove", "d"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "was not written by zpkgm") {
 		t.Errorf("remove of a foreign unit: %v", err)
 	}
-	writeTemplate(t, "d", "# pkgm-service project=acme.org/d store=/opt/pkgx", "")
+	writeTemplate(t, "d", "# pkgm-service project=acme.org/d store=/opt/zpkg", "")
 	sd.listErr = true
 	if err := cmdService([]string{"remove", "d"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "list-units") {
 		t.Errorf("remove when systemd cannot be asked: %v", err)
@@ -825,8 +905,8 @@ func TestServiceRemoveRefusals(t *testing.T) {
 
 func TestServiceListStates(t *testing.T) {
 	sd := withSystemd(t)
-	writeTemplate(t, "d", "# pkgm-service project=acme.org/d store=/opt/pkgx", "")
-	writeTemplate(t, "e", "# pkgm-service project=acme.org/e store=/opt/pkgx", "")
+	writeTemplate(t, "d", "# pkgm-service project=acme.org/d store=/opt/zpkg", "")
+	writeTemplate(t, "e", "# pkgm-service project=acme.org/e store=/opt/zpkg", "")
 	_ = os.WriteFile(filepath.Join(unitDir, "plain.service"), nil, 0o644)
 	_ = os.Mkdir(filepath.Join(unitDir, "dir@.service"), 0o755)
 	enable(t, "d@1.0.0.service")
@@ -867,8 +947,8 @@ func TestCmdServiceArguments(t *testing.T) {
 }
 
 func TestParseMarker(t *testing.T) {
-	m, ok := parseMarker("# pkgm-service project=a.org/b store=/opt/pkgx previous=1.2.3 future=x\n")
-	if !ok || m != (unitMarker{project: "a.org/b", store: "/opt/pkgx", previous: "1.2.3"}) {
+	m, ok := parseMarker("# pkgm-service project=a.org/b store=/opt/zpkg previous=1.2.3 future=x\n")
+	if !ok || m != (unitMarker{project: "a.org/b", store: "/opt/zpkg", previous: "1.2.3"}) {
 		t.Errorf("%+v %v", m, ok)
 	}
 	for _, l := range []string{"", "[Unit]", "# pkgm-service store=/x", "# pkgm-service project=a", "#zpkgm-service project=a store=/x"} {
@@ -876,7 +956,7 @@ func TestParseMarker(t *testing.T) {
 			t.Errorf("%q parsed as a marker", l)
 		}
 	}
-	if m.String() != "# pkgm-service project=a.org/b store=/opt/pkgx previous=1.2.3" {
+	if m.String() != "# pkgm-service project=a.org/b store=/opt/zpkg previous=1.2.3" {
 		t.Errorf("%s", m)
 	}
 	if _, ok := readMarker(filepath.Join(t.TempDir(), "absent")); ok {
@@ -896,16 +976,16 @@ func TestServiceConstraint(t *testing.T) {
 }
 
 func TestCheckStore(t *testing.T) {
-	for _, s := range []string{"/opt/pkgx", "/srv/pkgx", "/pkgx", "/homework"} {
+	for _, s := range []string{"/opt/zpkg", "/srv/zpkg", "/pkgx", "/homework"} {
 		if err := checkStore(s); err != nil {
 			t.Errorf("%s: %v", s, err)
 		}
 	}
 	for s, want := range map[string]string{
-		"/root/.pkgx":      "is under /root",
-		"/home/me/.pkgx":   "is under /home",
+		"/root/.zpkg":      "is under /root",
+		"/home/me/.zpkg":   "is under /home",
 		"/tmp/x":           "is under /tmp",
-		"/run/user/0/pkgx": "is under /run/user",
+		"/run/user/0/zpkg": "is under /run/user",
 		"relative":         "absolute path",
 		"/opt/my pkgx":     "absolute path",
 		"/opt/%i":          "absolute path",
@@ -937,7 +1017,7 @@ func TestCheckProgram(t *testing.T) {
 	_ = os.WriteFile(static, elfBytes(""), 0o755)
 	_ = os.WriteFile(dynamic, elfBytes("/lib/ld-linux-aarch64.so.1"), 0o755)
 	_ = os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755)
-	s := &bottle.Service{Name: "x", Command: "x"}
+	s := &artifact.Service{Name: "x", Command: "x"}
 	prov := []string{"bin/x"}
 	if err := checkProgram("p", s, prov, static); err != nil {
 		t.Errorf("static: %v", err)
@@ -945,7 +1025,7 @@ func TestCheckProgram(t *testing.T) {
 	for bin, want := range map[string]string{
 		dynamic:                    "dynamically linked (interpreter /lib/ld-linux-aarch64.so.1)",
 		script:                     "is not an ELF program",
-		filepath.Join(d, "absent"): "is not in the installed bottle",
+		filepath.Join(d, "absent"): "is not in the installed artifact",
 	} {
 		if err := checkProgram("p", s, prov, bin); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", bin, err)

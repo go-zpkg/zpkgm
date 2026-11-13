@@ -64,7 +64,7 @@ the target version is already installed, and `ZPKGM_FORCE=1` reinstalls anyway.
 go install github.com/go-zpkg/zpkgm@latest
 ```
 
-Once installed, `zpkgm install lz4.org` verifies each bottle against the signed
+Once installed, `zpkgm install lz4.org` verifies each artifact against the signed
 registry by default.
 
 ## Usage
@@ -83,17 +83,17 @@ zpkgm service      install|switch|rollback|list|remove   run a daemon under syst
 flags: -h/--help  -v/--version  -p/--pin  -P/--prefix DIR  -s/--from-scratch
        -f/--file FILE   read packages from a file, one <pkg>[@version] per line
        --lock FILE      install exactly what a `zbk lock` file pins
-env:   ZPKG_DIR     bottle store (default: ~/.zpkg, or <prefix>/pkgs when the
+env:   ZPKG_DIR     artifact store (default: ~/.zpkg, or <prefix>/pkgs when the
                     prefix is outside your home — see "A shim is a privilege
                     boundary")
-       ZPKG_DIST    bottle source (default: oci://ghcr.io/go-zpkg/packages, signed)
-       ZPKG_VERIFY  verify bottle signatures, fail-closed (default: on)
+       ZPKG_DIST    artifact source (default: oci://ghcr.io/go-zpkg/packages, signed)
+       ZPKG_VERIFY  verify artifact signatures, fail-closed (default: on)
        ZPKGM_PREFIX  default install prefix (ideal for FROM scratch)
 ```
 
 By default `zpkgm install lz4.org` pulls from our signed OCI registry and
-verifies each bottle's signature before installing — no env needed. The
-registry is `bottle.DistBase`, and `zpkgm --help` prints the one this binary is
+verifies each artifact's signature before installing — no env needed. The
+registry is `artifact.DistBase`, and `zpkgm --help` prints the one this binary is
 built against; it is named in one place so it moves in one edit. Point
 `ZPKG_DIST` elsewhere if you have a mirror of your own.
 
@@ -205,9 +205,9 @@ zpkgm service remove   <svc>             stop and disable every instance, delete
 ```
 
 A recipe that ships a daemon says how to run it in a `service "<name>" { … }`
-block (see [bottle](https://github.com/go-zpkg/bottle#a-recipe-can-declare-a-service)).
+block (see [artifact](https://github.com/go-zpkg/artifact#a-recipe-can-declare-a-service)).
 zpkgm **renders** the systemd unit from that data. No unit file comes in the
-bottle. The hardening every service shares is written once, here, and the
+artifact. The hardening every service shares is written once, here, and the
 recipe states only what differs between daemons.
 
 **One template per service, and the instance is the version.** zpkgm writes
@@ -359,9 +359,9 @@ back to environment variables and built-in defaults).
 
 `run` installs a package's full closure (its declared deps plus the implicit
 libc/gcc libraries — see [automatic closure completion](#automatic-closure-completion))
-and makes the glibc bottle's own loader available at `/lib/ld-linux`, so the
+and makes the glibc artifact's own loader available at `/lib/ld-linux`, so the
 binary runs even on an image with no system libc. Packages that ship a
-`#!/bin/sh` wrapper (git, …) also get the bottled bash + coreutils — see
+`#!/bin/sh` wrapper (git, …) also get the packaged bash + coreutils — see
 [wrapper scripts](#wrapper-scripts).
 
 ```dockerfile
@@ -381,11 +381,11 @@ run** real packages, with no system libc.
 
 ### automatic closure completion
 
-Bottles link the "implicit system" libraries — `libc`/`libm`/`libpthread`
+Artifacts link the "implicit system" libraries — `libc`/`libm`/`libpthread`
 (glibc) and, for C++ packages, `libgcc_s`/`libstdc++`/`libatomic` (gcc) —
 without declaring them, because the recipes they came from assume a host
 toolchain. On `FROM scratch` there is no host. `run`, and `install --from-scratch`/`-s`, read each
-bottle's ELF `DT_NEEDED` (via Go's `debug/elf`) and pull the bottles that fill
+artifact's ELF `DT_NEEDED` (via Go's `debug/elf`) and pull the artifacts that fill
 the gap automatically:
 
 - glibc → `gnu.org/glibc`
@@ -426,12 +426,12 @@ Prefix precedence: `--prefix`/`-P` flag → `ZPKGM_PREFIX` → root ? `/usr/loca
 
 ### wrapper scripts
 
-Some bottled tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
+Some packaged tools ship as `#!/bin/sh` wrapper scripts (git, several perl utils)
 that set up env and exec the real ELF. On `FROM scratch` there is no shell — so
-zpkgm, being a package manager, **installs the bottled `gnu.org/bash` +
+zpkgm, being a package manager, **installs the packaged `gnu.org/bash` +
 `gnu.org/coreutils`** and points `/bin/sh` at that real bash (and puts coreutils
-like `dirname` on `PATH`). It also symlinks the glibc bottle's own loader to
-`/lib/ld-linux` (best-effort; a no-op on a normal system) so every bottle ELF —
+like `dirname` on `PATH`). It also symlinks the glibc artifact's own loader to
+`/lib/ld-linux` (best-effort; a no-op on a normal system) so every artifact ELF —
 the wrapper's target and any children — resolves its `PT_INTERP` natively.
 Using a real bash (rather than reimplementing a shell) means the wrappers get exactly
 the `set -e` semantics they rely on. That is how `git` runs on scratch.
@@ -463,11 +463,11 @@ need in order to go and look.
    runtime `dependencies:` graph breadth-first; pick the highest
    `versions.txt` entry satisfying each constraint (`*`, `^`, `~`, `>=`, `=`).
 2. **download** — fetch `<project>/<os>/<arch>/v<ver>.tar.{gz,xz}` from the
-   bottle source (default: our signed OCI registry, verifying each bottle's
+   artifact source (default: our signed OCI registry, verifying each artifact's
    signature — `zpkgm --help` prints which one, and `ZPKG_DIST` overrides it).
 3. **extract** — stream straight through gzip/xz + tar into `ZPKG_DIR`.
 4. **link** — write env-setting stubs (or run through the loader) so the tools
-   find their sibling bottles' libraries.
+   find their sibling artifacts' libraries.
 
 ## Where it is proven to work
 

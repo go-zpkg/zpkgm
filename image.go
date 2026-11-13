@@ -20,9 +20,9 @@ import (
 // zpkgm is a static CGO_ENABLED=0 binary that already runs on `FROM scratch`, so
 // it bootstraps the entire userland from within the image: the `RUN` step pulls
 // the closure over HTTPS (zpkgm's embedded CA + net/http) straight into the
-// image and wires the pkgx loader (bottle.SetupScratchRootfs). There is no
+// image and wires the pkgx loader (artifact.SetupScratchRootfs). There is no
 // host-side rootfs staging and no manual loader symlink — the `RUN` step IS the
-// from-scratch install (and, in CI, the proof that the published bottles are
+// from-scratch install (and, in CI, the proof that the published artifacts are
 // self-sufficient with no system libc).
 //
 // The subcommand only emits the Containerfile: zpkgm is a package manager, not a
@@ -54,12 +54,12 @@ func writeImage(w io.Writer, args []string, overlay, glibc string) error {
 	// where there is no /bin/sh. json.Marshal escapes the args safely.
 	var b strings.Builder
 	fmt.Fprintln(&b, "FROM scratch")
-	fmt.Fprintln(&b, "ENV ZPKG_DIR=/pkgx")
+	fmt.Fprintln(&b, "ENV ZPKG_DIR=/zpkg")
 	fmt.Fprintln(&b, "ENV HOME=/root")
 	if overlay != "" {
 		fmt.Fprintln(&b, "ENV ZPKG_PANTRY_OVERLAY="+overlay)
 	}
-	// A pinned glibc is baked as the environment variable bottle resolves the
+	// A pinned glibc is baked as the environment variable artifact resolves the
 	// implicit C library with, so it holds for BOTH the RUN that installs the
 	// closure and every later `zpkgm run` inside the image — one glibc, chosen
 	// once, deterministic for a known cluster kernel. (Passing an extra

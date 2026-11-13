@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-zpkg/bottle"
+	"github.com/go-zpkg/artifact"
 )
 
 // hostPlatform is what a lock taken here must name.
 func hostPlatform() string {
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 	return osn + "/" + arch
 }
 
@@ -21,22 +21,22 @@ func hostPlatform() string {
 // Hand-writing the HCL would test my idea of the format rather than the
 // format: a fixture that drifts from `bk lock`'s output would keep passing
 // while the real files stopped loading.
-func writeLock(t *testing.T, d bottle.Lock) string {
+func writeLock(t *testing.T, d artifact.Lock) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "seed.lock.hcl")
-	if err := os.WriteFile(path, []byte(bottle.RenderLock(d)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(artifact.RenderLock(d)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return path
 }
 
-func publishedLock(pins ...bottle.LockPin) bottle.Lock {
-	return bottle.Lock{
+func publishedLock(pins ...artifact.LockPin) artifact.Lock {
+	return artifact.Lock{
 		Version:   1,
 		Platform:  hostPlatform(),
 		Generated: "2026-11-03T06:00:00Z",
-		BK:        "v0.49.0",
-		Pinned:    bottle.PinsPublished,
+		ZBK:       "v0.49.0",
+		Pinned:    artifact.PinsPublished,
 		Roots:     []string{"acme.org/tool"},
 		Pins:      pins,
 	}
@@ -45,12 +45,12 @@ func publishedLock(pins ...bottle.LockPin) bottle.Lock {
 // ⛔⛔ A `recipes` LOCK CANNOT BE INSTALLED, and the refusal must say which
 // kind it got. Its versions are the newest the recipes can BUILD, which is not
 // the newest PUBLISHED for a platform; installing one asks the registry for
-// bottles that were never built, and the failure would name a missing version
+// artifacts that were never built, and the failure would name a missing version
 // instead of the wrong kind of file.
 func TestARecipesLockIsRefused(t *testing.T) {
-	d := publishedLock(bottle.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
-	d.Pinned = bottle.PinsFromRecipes
-	osn, arch := bottle.HostSlug()
+	d := publishedLock(artifact.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
+	d.Pinned = artifact.PinsFromRecipes
+	osn, arch := artifact.HostSlug()
 
 	_, err := lockClosure(writeLock(t, d), osn, arch)
 	if err == nil {
@@ -67,9 +67,9 @@ func TestARecipesLockIsRefused(t *testing.T) {
 // field existed has it empty, so a default that accepted them would install
 // exactly the files most likely to be wrong.
 func TestALockWithNoPinnedFieldIsTreatedAsRecipesAndRefused(t *testing.T) {
-	d := publishedLock(bottle.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
+	d := publishedLock(artifact.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
 	d.Pinned = ""
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 
 	if _, err := lockClosure(writeLock(t, d), osn, arch); err == nil {
 		t.Fatal("a lock with no `pinned` field was accepted for installation")
@@ -80,7 +80,7 @@ func TestALockWithNoPinnedFieldIsTreatedAsRecipesAndRefused(t *testing.T) {
 // not exist for another, and where the versions coincide the install would
 // succeed while giving a set nobody locked.
 func TestALockFromAnotherPlatformIsRefused(t *testing.T) {
-	d := publishedLock(bottle.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
+	d := publishedLock(artifact.LockPin{Project: "acme.org/tool", Version: "1.0.0"})
 	d.Platform = "linux/s390x"
 
 	_, err := lockClosure(writeLock(t, d), "darwin", "aarch64")
@@ -96,14 +96,14 @@ func TestALockFromAnotherPlatformIsRefused(t *testing.T) {
 }
 
 // ⛔ A LOCK THAT PINS NOTHING IS NOT AN EMPTY JOB — and the refusal comes from
-// `bottle.ReadLock`, not from here.
+// `artifact.ReadLock`, not from here.
 //
 // This test first asserted only that an error came back, and passed while a
 // guard of mine never ran: the coverage profile showed the branch at count 0.
 // The guard was unreachable and is gone; the message is asserted now, so the
 // test says WHOSE refusal this is and fails if the library stops making it.
 func TestALockWithNoPinsIsRefusedByTheReader(t *testing.T) {
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 	_, err := lockClosure(writeLock(t, publishedLock()), osn, arch)
 	if err == nil {
 		t.Fatal("a lock pinning nothing was accepted")
@@ -114,7 +114,7 @@ func TestALockWithNoPinsIsRefusedByTheReader(t *testing.T) {
 }
 
 func TestAnUnreadableLockIsReported(t *testing.T) {
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 	if _, err := lockClosure(filepath.Join(t.TempDir(), "absent.hcl"), osn, arch); err == nil {
 		t.Fatal("a missing lockfile was accepted")
 	}
@@ -130,11 +130,11 @@ func TestAnUnreadableLockIsReported(t *testing.T) {
 // completeness — and it did fail that way first.
 func TestEveryPinIsReturnedNotJustTheRoots(t *testing.T) {
 	d := publishedLock(
-		bottle.LockPin{Project: "acme.org/tool", Version: "1.0.0"},
-		bottle.LockPin{Project: "acme.org/lib", Version: "2.3.4"},
-		bottle.LockPin{Project: "zlib.net", Version: "1.3.2"},
+		artifact.LockPin{Project: "acme.org/tool", Version: "1.0.0"},
+		artifact.LockPin{Project: "acme.org/lib", Version: "2.3.4"},
+		artifact.LockPin{Project: "zlib.net", Version: "1.3.2"},
 	)
-	osn, arch := bottle.HostSlug()
+	osn, arch := artifact.HostSlug()
 
 	got, err := lockClosure(writeLock(t, d), osn, arch)
 	if err != nil {
@@ -234,17 +234,22 @@ func TestInstallFromALockInstallsThePinnedVersions(t *testing.T) {
 	// what any resolution would choose, so if the lock were resolved rather
 	// than obeyed this test would install 2.0.0 and still look like a success.
 	path := writeLock(t, publishedLock(
-		bottle.LockPin{Project: "acme.org/tool", Version: "1.0.0"},
+		artifact.LockPin{Project: "acme.org/tool", Version: "1.0.0"},
 	))
 
 	if err := dispatch("install", nil, flags{lock: path}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "acme.org", "tool", "v1.0.0")); err != nil {
+	// ⛔ THE PREFIX IS ASKED FOR, NOT COMPOSED. An installed directory carries
+	// a variant hash (v1.0.0-hahofgyna2nw7bpyf), so composing "v1.0.0" here
+	// stats a path that never exists and the FIRST assertion fails while the
+	// SECOND passes for the wrong reason — "2.0.0 was not installed" would be
+	// true of every possible outcome, including the bug this test is for.
+	if _, err := os.Stat(artifact.StorePrefix(dir, "acme.org/tool", artifact.ParseVer("1.0.0"))); err != nil {
 		t.Errorf("the pinned version was not installed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "acme.org", "tool", "v2.0.0")); err == nil {
+	if _, err := os.Stat(artifact.StorePrefix(dir, "acme.org/tool", artifact.ParseVer("2.0.0"))); err == nil {
 		t.Error("the newest version was installed: the lock was resolved, not obeyed")
 	}
 	if b, err := os.ReadFile(filepath.Join(prefix, "bin", "tool")); err != nil ||
@@ -271,8 +276,8 @@ func TestAPinThatCannotBeInstalledNamesTheProject(t *testing.T) {
 	})()
 	t.Setenv("ZPKG_DIR", t.TempDir())
 
-	err := installLocked(io.Discard, []bottle.Resolved{
-		{Project: "absent.example/nothing", Version: bottle.ParseVer("1.0.0")},
+	err := installLocked(io.Discard, []artifact.Resolved{
+		{Project: "absent.example/nothing", Version: artifact.ParseVer("1.0.0")},
 	}, t.TempDir())
 	if err == nil {
 		t.Fatal("a pin that is not published was reported as installed")
